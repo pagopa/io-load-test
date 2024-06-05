@@ -7,6 +7,9 @@ import exec from "k6/execution";
 import { SharedArray } from "k6/data";
 import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
+import { check } from "k6";
+import { Trend } from "k6/metrics";
+import http from "k6/http";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
@@ -49,9 +52,36 @@ export const options = {
   },
 };
 
+const profileDuration = new Trend("get_profile_duration");
+const messagesDuration = new Trend("get_messages_duration");
+
 export default async function() {
   const token = lvScenario(config, exec.vu.idInInstance, keys);
-  console.log(`token => ${token}`);
+  // Retrieve the profile using the new token
+  const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    responseType: "text",
+  });
+  check(getProfile, {
+    "GET Profile returns 200": (r) => r.status === 200,
+  });
+  profileDuration.add(getProfile.timings.duration);
+
+  // Retrieve users's messages
+  const getMessages = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    responseType: "text",
+  });
+  check(getMessages, {
+    "GET Users's messages returns 200": (r) => r.status === 200,
+  });
+  messagesDuration.add(getMessages.timings.duration);
 }
 
 export function handleSummary(data: unknown) {

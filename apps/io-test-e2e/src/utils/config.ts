@@ -1,6 +1,7 @@
 import { pipe } from "fp-ts/lib/function";
 import * as t from "io-ts";
 import * as E from "fp-ts/Either";
+import * as O from "fp-ts/Option";
 import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 import { FiscalCode, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { CommaSeparatedListOf } from "./separated-list";
@@ -37,6 +38,7 @@ export type K6Config = t.TypeOf<typeof K6Config>;
 
 export const IConfig = t.intersection([
   t.type({
+    AUTH_BACKEND_BASE_URL: t.string,
     IO_BACKEND_BASE_URL: t.string,
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
@@ -53,6 +55,11 @@ export const getConfigOrThrow = (
     environment,
     (env) => ({
       ...env,
+      AUTH_BACKEND_BASE_URL: pipe(
+        env.AUTH_BACKEND_BASE_URL,
+        O.fromNullable,
+        O.getOrElse(() => env.IO_BACKEND_BASE_URL)
+      ),
       FEATURE_ENABLED: pipe(
         env.FEATURE_ENABLED,
         BooleanFromString.decode,

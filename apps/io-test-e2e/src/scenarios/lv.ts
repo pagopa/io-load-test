@@ -30,7 +30,7 @@ export const lvScenario = (
   let duration = 0;
   // Generate Nonce
   const generateNonceResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/fast-login/nonce/generate`,
+    `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login/nonce/generate`,
     undefined,
     {
       responseType: "text",
@@ -83,12 +83,12 @@ export const lvScenario = (
 
   // Refresh the session using Lollipop signature
   const refreshSession = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/fast-login`,
+    `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login`,
     undefined,
     {
       headers: {
         "x-pagopa-lollipop-original-method": "POST",
-        "x-pagopa-lollipop-original-url": `${config.IO_BACKEND_BASE_URL}/api/v1/fast-login`,
+        "x-pagopa-lollipop-original-url": `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login`,
         signature: lollipopParams.signature,
         "signature-input": lollipopParams.signatureInput,
         "Content-Type": "application/json",
@@ -113,7 +113,7 @@ export const lvScenario = (
   );
 
   // Retrieve the session using the new token
-  const getSession = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/session`, {
+  const getSession = http.get(`${config.AUTH_BACKEND_BASE_URL}/api/v1/session`, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

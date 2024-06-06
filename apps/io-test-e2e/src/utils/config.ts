@@ -15,7 +15,7 @@ export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
 
 export const FeatureScanarioEnabledType = t.type({
   FEATURE_ENABLED: t.literal(true),
-  SCENARIOS: t.readonlyArray(FeatureScenarioType),
+  SCENARIOS: CommaSeparatedListOf(FeatureScenarioType),
 });
 export type FeatureScanarioEnabledType = t.TypeOf<typeof FeatureScanarioEnabledType>;
 
@@ -57,7 +57,7 @@ export const getConfigOrThrow = (
         env.FEATURE_ENABLED,
         BooleanFromString.decode,
         E.getOrElse(() => false)
-      ),
+      )
     }),
     IConfig.decode,
     E.getOrElseW((errs) => {

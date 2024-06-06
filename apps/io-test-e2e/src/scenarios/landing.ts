@@ -9,8 +9,7 @@ import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { IConfig } from "../utils/config";
 
 const profileDuration = new Trend("get_profile_duration");
-const messagesDuration = new Trend("get_messages_duration");
-
+const messagesDuration = new Trend("get_opening_messages_duration");
 
 export const appOpening = (config: IConfig, token: NonEmptyString) => {
     // Retrieve the profile using the new token

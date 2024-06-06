@@ -1,4 +1,4 @@
-import { getConfigOrThrow } from "./utils/config";
+import { FeatureScanarioEnabledType, getConfigOrThrow } from "./utils/config";
 //@ts-ignore
 import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 //@ts-ignore
@@ -8,6 +8,9 @@ import { SharedArray } from "k6/data";
 import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
 import { appOpening } from "./scenarios/landing";
+import { pipe } from "fp-ts/lib/function";
+import * as E from "fp-ts/Either";
+import { getFeatureScenario } from "./scenarios/mapping";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
@@ -21,7 +24,6 @@ const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
 const config = getConfigOrThrow(__ENV);
 
 export const options = {
-  discardResponseBodies: true,
   scenarios: {
     contacts: {
       executor: "constant-arrival-rate",
@@ -53,6 +55,15 @@ export const options = {
 export default async function() {
   const token = lvScenario(config, exec.vu.idInInstance, keys);
   appOpening(config, token);
+  pipe(
+    config,
+    FeatureScanarioEnabledType.decode,
+    E.map((featureScenarioConfig) =>
+      featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
+    ),
+    E.getOrElseW(() => []),
+    (scenarios) => scenarios.forEach((fn) => fn(config, token))
+  );
 }
 
 export function handleSummary(data: unknown) {

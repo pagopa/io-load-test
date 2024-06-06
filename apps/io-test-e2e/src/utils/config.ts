@@ -5,6 +5,27 @@ import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 import { FiscalCode, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { CommaSeparatedListOf } from "./separated-list";
 import { IntegerFromString } from "@pagopa/ts-commons/lib/numbers";
+import { BooleanFromString } from "io-ts-types";
+
+export const FeatureScenarioType = t.union([
+  t.literal("TRIAL"),
+  t.literal("MESSAGE_DETAIL"),
+]);
+export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
+
+export const FeatureScanarioEnabledType = t.type({
+  FEATURE_ENABLED: t.literal(true),
+  SCENARIOS: t.readonlyArray(FeatureScenarioType),
+});
+export type FeatureScanarioEnabledType = t.TypeOf<typeof FeatureScanarioEnabledType>;
+
+export const FeatureScenarioConfig = t.union([
+  t.type({
+    FEATURE_ENABLED: t.literal(false),
+  }),
+  FeatureScanarioEnabledType
+]);
+export type FeatureScenarioConfig = t.TypeOf<typeof FeatureScenarioConfig>;
 
 export const K6Config = t.type({
   rate: IntegerFromString,
@@ -21,14 +42,23 @@ export const IConfig = t.intersection([
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
   }),
   K6Config,
+  FeatureScenarioConfig,
 ]);
 export type IConfig = t.TypeOf<typeof IConfig>;
 
 export const getConfigOrThrow = (
-  env: { [name: string]: string } | NodeJS.ProcessEnv
+  environment: { [name: string]: string } | NodeJS.ProcessEnv
 ) =>
   pipe(
-    env,
+    environment,
+    (env) => ({
+      ...env,
+      FEATURE_ENABLED: pipe(
+        env.FEATURE_ENABLED,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+    }),
     IConfig.decode,
     E.getOrElseW((errs) => {
       throw new Error(readableReportSimplified(errs));

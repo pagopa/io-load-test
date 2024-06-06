@@ -56,7 +56,7 @@ export const lvScenario = (
     privateKeyJwk: JSON.stringify(keys[vuIdInstance - 1].privateKey),
     thumbprint: keys[vuIdInstance - 1].thumbprint,
     nonce,
-    url: config.IO_BACKEND_BASE_URL + "/api/v1/fast-login",
+    url: config.AUTH_BACKEND_BASE_URL + "/api/v1/fast-login",
   };
   const signerResponse = http.post(
     `http://localhost:8001/signature-params`,

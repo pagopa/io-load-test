@@ -7,7 +7,7 @@ import * as E from "fp-ts/Either";
 import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 //@ts-ignore
 import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
-import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
+import { errorsToReadableMessages, readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 
 import { SignerResponseBody } from "../types/signer";
 import { AccessToken } from "../generated/definitions/login/AccessToken";
@@ -19,14 +19,13 @@ import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 const generateNonceDuration = new Trend("generate_nonce_duration");
 const refreshFastLoginDuration = new Trend("fast_login_duration");
 const refreshFastLoginWaiting = new Trend("fast_login_waiting");
-const sessionDuration = new Trend("get_session_duration");
 const scenarioDuration = new Trend("scenario_duration");
 
 export const lvScenario = (
   config: IConfig,
-  vuIdInstance: number,
-  keys: ReadonlyArray<GeneratedKeypair>
+  key: GeneratedKeypair
 ): NonEmptyString => {
+  
   let duration = 0;
   // Generate Nonce
   const generateNonceResponse = http.post(
@@ -50,11 +49,10 @@ export const lvScenario = (
       fail(readableReportSimplified(_));
     })
   );
-
   // Generate Signature params for lollipop
   const parameters = {
-    privateKeyJwk: JSON.stringify(keys[vuIdInstance - 1].privateKey),
-    thumbprint: keys[vuIdInstance - 1].thumbprint,
+    privateKeyJwk: JSON.stringify(key.privateKey),
+    thumbprint: key.thumbprint,
     nonce,
     url: config.AUTH_BACKEND_BASE_URL + "/api/v1/fast-login",
   };
@@ -107,24 +105,11 @@ export const lvScenario = (
     AccessToken.decode,
     E.map((_) => _.token),
     E.getOrElseW((_) => {
-      console.error("Error decoding the refresh session response");
+      console.error(`refreshResponse => ${refreshSession.status}`)
+      console.error(`Error decoding the refresh session response|DETAIL=${errorsToReadableMessages(_).join("|")}`);
       fail(readableReportSimplified(_));
     })
   );
-
-  // Retrieve the session using the new token
-  const getSession = http.get(`${config.AUTH_BACKEND_BASE_URL}/api/v1/session`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    responseType: "text",
-  });
-  check(getSession, {
-    "GET Get Session returns 200": (r) => r.status === 200,
-  });
-  sessionDuration.add(getSession.timings.duration);
-  duration += getSession.timings.duration;
   scenarioDuration.add(duration);
   return token;
 };

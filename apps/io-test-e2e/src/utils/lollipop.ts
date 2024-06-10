@@ -24,6 +24,8 @@ export type GeneratedKeypair = {
   fiscalCode: FiscalCode;
   thumbprint: string;
 };
+
+
 export const initNewLollipopKey = (config: IConfig) => async (
   fiscalCode: FiscalCode
 ): Promise<GeneratedKeypair> => {

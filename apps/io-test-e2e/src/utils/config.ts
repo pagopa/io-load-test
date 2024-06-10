@@ -42,6 +42,7 @@ export const IConfig = t.intersection([
     IO_BACKEND_BASE_URL: t.string,
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
+    REDIS_CONN_STRING: NonEmptyString
   }),
   K6Config,
   FeatureScenarioConfig,

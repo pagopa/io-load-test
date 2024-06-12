@@ -57,7 +57,7 @@ export const options = {
       timeUnit: "1s",
 
       // Pre-allocate VUs (concurrent users)
-      preAllocatedVUs: 1,
+      preAllocatedVUs: config.preAllocatedVUs,
     },
   },
 };
@@ -66,6 +66,10 @@ const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 
 export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
 const queueInitializer = keysInitializer(REDIS_CLIENT);
+
+export async function setup() {
+  //await queueInitializer("keys", keys)()
+}
 
 export default async function() {
   await pipe(
@@ -119,7 +123,7 @@ export default async function() {
         )
       )
     ),
-    TE.mapLeft(e => console.error(JSON.stringify(e))),
+    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)}`)),
     TE.toUnion
   )();
 }

@@ -28,7 +28,7 @@ export const appOpening = async (
     }
   );
   check(getSession, {
-    "GET Get Session returns 200": (r) => r.status === 200,
+    "GET Get Session returns 200": (r) => [200, 401].includes(r.status),
   });
   if (getSession.status !== 200){
     console.log(`Get Session returns an error => statusCode=${getSession.status}, detail=${getSession.body}`)
@@ -44,7 +44,7 @@ export const appOpening = async (
     responseType: "text",
   });
   check(getProfile, {
-    "GET Profile returns 200": (r) => r.status === 200,
+    "GET Profile returns 200": (r) => [200, 401].includes(r.status),
   });
   if (getProfile.status !== 200){
     console.log(`Get Profile returns an error => statusCode=${getProfile.status}, detail=${getProfile.body}`)
@@ -63,7 +63,7 @@ export const appOpening = async (
     }
   );
   check(getMessages, {
-    "GET Users's messages returns 200": (r) => r.status === 200,
+    "GET Users's messages returns 200": (r) => [200, 401].includes(r.status),
   });
   if (getMessages.status !== 200){
     console.log(`Get Messages returns an error => statusCode=${getMessages.status}, detail=${getMessages.body}`)

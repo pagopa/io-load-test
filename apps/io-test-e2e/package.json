@@ -12,7 +12,7 @@
     "prebuild2": "yarn generate",
     "build": "NODE_OPTIONS=--openssl-legacy-provider webpack --config webpack.config.js --mode=production",
     "generate": "npm-run-all generate:*",
-    "generate:backend": "rimraf ./src/generated/definitions/backend && shx mkdir -p ./src/generated/definitions/backend && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-backend/master/openapi/generated/api_backend.yaml --no-strict --out-dir ./src/generated/definitions/backend",
+    "generate:backend": "rimraf ./src/generated/definitions/backend && shx mkdir -p ./src/generated/definitions/backend && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-backend/master/openapi/generated/api_backend.yaml --no-strict --out-dir ./src/generated/definitions/backend --request-types --response-decoders --client",
     "generate:fast-login": "rimraf ./src/generated/definitions/fast-login && shx mkdir -p ./src/generated/definitions/fast-login && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-fast-login/main/api/internal.yaml --no-strict --out-dir ./src/generated/definitions/fast-login",
     "generate:login": "rimraf ./src/generated/definitions/login && shx mkdir -p ./src/generated/definitions/login && gen-api-models --api-spec ./api/testlogin.yaml --no-strict --out-dir ./src/generated/definitions/login --request-types --response-decoders --client",
     "generate:lollipop": "rimraf ./src/generated/definitions/lollipop && shx mkdir -p ./src/generated/definitions/lollipop && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-lollipop/master/openapi/internal.yaml --no-strict --out-dir ./src/generated/definitions/lollipop --request-types --response-decoders --client",

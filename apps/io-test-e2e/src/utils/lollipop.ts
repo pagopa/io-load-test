@@ -79,7 +79,12 @@ export const initNewLollipopKey = (config: IConfig) => async (
         TE.fromPredicate(
           (_): _ is r.IResponseType<200, AccessToken, never> =>
             _.status === 200,
-          (res) => new Error(`Test Login: [status ${res.status}]`)
+          (res) =>
+            new Error(
+              `Test Login: [status ${res.status}] [msg ${JSON.stringify(
+                res.value
+              )}]`
+            )
         ),
         TE.map((r) => r.value.token),
         TE.bindTo("token"),

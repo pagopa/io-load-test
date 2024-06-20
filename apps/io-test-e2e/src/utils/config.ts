@@ -36,15 +36,32 @@ export const K6Config = t.type({
 });
 export type K6Config = t.TypeOf<typeof K6Config>;
 
+export const FixturesEnabledConfig = t.type({
+  FIXTURES_ENABLED: t.literal(true),
+  SEND_MESSAGES_APIM_BASE_URL: NonEmptyString,
+  SEND_MESSAGES_APIM_SUBSCRIPTION_KEYS: CommaSeparatedListOf(NonEmptyString),
+});
+export type FixturesEnabledConfig = t.TypeOf<typeof FixturesEnabledConfig>;
+
+export const FixturesConfig = t.union([
+  t.type({
+    FIXTURES_ENABLED: t.literal(false)
+  }),
+  FixturesEnabledConfig
+]);
+export type FixturesConfig = t.TypeOf<typeof FixturesConfig>;
+
 export const IConfig = t.intersection([
   t.type({
     AUTH_BACKEND_BASE_URL: t.string,
     IO_BACKEND_BASE_URL: t.string,
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
+    REDIS_CONN_STRING: NonEmptyString
   }),
   K6Config,
   FeatureScenarioConfig,
+  FixturesConfig,
 ]);
 export type IConfig = t.TypeOf<typeof IConfig>;
 
@@ -62,6 +79,11 @@ export const getConfigOrThrow = (
       ),
       FEATURE_ENABLED: pipe(
         env.FEATURE_ENABLED,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+      FIXTURES_ENABLED: pipe(
+        env.FIXTURES_ENABLED,
         BooleanFromString.decode,
         E.getOrElse(() => false)
       )

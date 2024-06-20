@@ -1,4 +1,4 @@
-import { FiscalCode } from "@pagopa/ts-commons/lib/strings";
+import { FiscalCode, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import * as jose from "jose";
 import { JwkPubKeyHashAlgorithmEnum } from "../generated/definitions/lollipop/JwkPubKeyHashAlgorithm";
 import { flow, pipe } from "fp-ts/lib/function";
@@ -24,9 +24,15 @@ export type GeneratedKeypair = {
   fiscalCode: FiscalCode;
   thumbprint: string;
 };
+
+export type InitLollipopReturnType = {
+  keyPair: GeneratedKeypair;
+  token: NonEmptyString;
+};
+
 export const initNewLollipopKey = (config: IConfig) => async (
   fiscalCode: FiscalCode
-): Promise<GeneratedKeypair> => {
+): Promise<InitLollipopReturnType> => {
   const { publicKey, privateKey } = await jose.generateKeyPair("ES256");
   const privateJwk = await jose.exportJWK(privateKey);
   const publicJwk = await jose.exportJWK(publicKey);
@@ -73,19 +79,27 @@ export const initNewLollipopKey = (config: IConfig) => async (
         TE.fromPredicate(
           (_): _ is r.IResponseType<200, AccessToken, never> =>
             _.status === 200,
-          (res) => new Error(`Test Login: [status ${res.status}]`)
+          (res) =>
+            new Error(
+              `Test Login: [status ${res.status}] [msg ${JSON.stringify(
+                res.value
+              )}]`
+            )
         ),
-        TE.chain(() =>
+        TE.map((r) => r.value.token),
+        TE.bindTo("token"),
+        TE.bind("thumbprint", () =>
           TE.tryCatch(() => jose.calculateJwkThumbprint(publicJwk), E.toError)
         ),
-        TE.map((thumbprint) => {
-          return {
+        TE.map(({ thumbprint, token }) => ({
+          keyPair: {
             privateKey: privateJwk,
             publicKey: publicJwk,
             fiscalCode,
             thumbprint: thumbprint,
-          };
-        })
+          },
+          token,
+        }))
       )
     ),
     TE.getOrElse((err) => {

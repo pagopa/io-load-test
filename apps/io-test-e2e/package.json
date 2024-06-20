@@ -7,14 +7,16 @@
   "scripts": {
     "start": "dotenv -e .env k6 run --http-debug=\"full\" dist/index.js",
     "data": "dotenv -e .env ts-node ./src/generator/keys.ts > ./data/keys.json",
+    "fixtures": "dotenv -e .env ts-node ./src/generator/fixtures.ts",
     "signer": "ts-node ./src/generator/signer.ts",
     "prebuild2": "yarn generate",
     "build": "NODE_OPTIONS=--openssl-legacy-provider webpack --config webpack.config.js --mode=production",
     "generate": "npm-run-all generate:*",
-    "generate:backend": "rimraf ./src/generated/definitions/backend && shx mkdir -p ./src/generated/definitions/backend && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-backend/master/openapi/generated/api_backend.yaml --no-strict --out-dir ./src/generated/definitions/backend",
+    "generate:backend": "rimraf ./src/generated/definitions/backend && shx mkdir -p ./src/generated/definitions/backend && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-backend/master/openapi/generated/api_backend.yaml --no-strict --out-dir ./src/generated/definitions/backend --request-types --response-decoders --client",
     "generate:fast-login": "rimraf ./src/generated/definitions/fast-login && shx mkdir -p ./src/generated/definitions/fast-login && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-fast-login/main/api/internal.yaml --no-strict --out-dir ./src/generated/definitions/fast-login",
     "generate:login": "rimraf ./src/generated/definitions/login && shx mkdir -p ./src/generated/definitions/login && gen-api-models --api-spec ./api/testlogin.yaml --no-strict --out-dir ./src/generated/definitions/login --request-types --response-decoders --client",
-    "generate:lollipop": "rimraf ./src/generated/definitions/lollipop && shx mkdir -p ./src/generated/definitions/lollipop && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-lollipop/master/openapi/internal.yaml --no-strict --out-dir ./src/generated/definitions/lollipop --request-types --response-decoders --client"
+    "generate:lollipop": "rimraf ./src/generated/definitions/lollipop && shx mkdir -p ./src/generated/definitions/lollipop && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-lollipop/master/openapi/internal.yaml --no-strict --out-dir ./src/generated/definitions/lollipop --request-types --response-decoders --client",
+    "generate:services": "rimraf ./src/generated/definitions/services && shx mkdir -p ./src/generated/definitions/services && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-functions-services/master/openapi/index.yaml --no-strict --out-dir ./src/generated/definitions/services --request-types --response-decoders --client"
   },
   "devDependencies": {
     "@babel/core": "7.13.16",
@@ -44,6 +46,7 @@
   },
   "dependencies": {
     "@mattrglobal/http-signatures": "^4.1.0",
+    "@faker-js/faker": "^8.4.1",
     "@pagopa/ts-commons": "^12.3.0",
     "date-fns": "^2.30.0",
     "express": "^4.18.2",

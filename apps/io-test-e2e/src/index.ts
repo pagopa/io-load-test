@@ -3,14 +3,24 @@ import { FeatureScanarioEnabledType, getConfigOrThrow } from "./utils/config";
 import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 //@ts-ignore
 import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
-import exec from "k6/execution";
-import { SharedArray } from "k6/data";
 import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
 import { appOpening } from "./scenarios/landing";
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
+import * as TE from "fp-ts/TaskEither";
+import * as AR from "fp-ts/Array";
 import { getFeatureScenario } from "./scenarios/mapping";
+import { getRedisClient } from "./utils/redis";
+import {
+  checkAndGetToken,
+  delKey,
+  keysInitializer,
+  popListKeyAsJson,
+  pushListKey,
+  setKey,
+} from "./utils/token";
+import { SharedArray } from "k6/data";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
@@ -47,23 +57,75 @@ export const options = {
       timeUnit: "1s",
 
       // Pre-allocate VUs (concurrent users)
-      preAllocatedVUs: keys.length,
+      preAllocatedVUs: config.preAllocatedVUs,
     },
   },
 };
 
+const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
+
+export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
+const queueInitializer = keysInitializer(REDIS_CLIENT);
+
+export async function setup() {
+  //await queueInitializer("keys", keys)()
+}
+
 export default async function() {
-  const token = lvScenario(config, exec.vu.idInInstance, keys);
-  appOpening(config, token);
-  pipe(
-    config,
-    FeatureScanarioEnabledType.decode,
-    E.map((featureScenarioConfig) =>
-      featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
+  await pipe(
+    queueInitializer("keys", keys),
+    TE.chain(() => popListKeyAsJson(REDIS_CLIENT, "keys")),
+    TE.map((generatedKeyPair) => generatedKeyPair as GeneratedKeypair),
+    TE.chain((key) =>
+      pipe(
+        delKey(REDIS_CLIENT, key.thumbprint),
+        TE.chain(() =>
+          pipe(
+            lvScenario(config, key),
+            TE.of,
+            TE.chain((token) =>
+              pipe(
+                setKey(REDIS_CLIENT, key.thumbprint, token),
+                TE.chain(() =>
+                  pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
+                ),
+                TE.map(() => token)
+              )
+            ),
+            TE.orElseW(() =>
+              pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
+            )
+          )
+        ),
+        TE.chain(() =>
+          TE.tryCatch(
+            () => appOpening(config, key.thumbprint, tokenChecker),
+            E.toError
+          )
+        ),
+        TE.map(() =>
+          pipe(
+            config,
+            FeatureScanarioEnabledType.decode,
+            E.map((featureScenarioConfig) =>
+              featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
+            ),
+            E.getOrElseW(() => []),
+            (scenarios) =>
+              scenarios.map((fn) =>
+                TE.tryCatch(
+                  () => fn(config, key.thumbprint, tokenChecker),
+                  E.toError
+                )
+              ),
+            AR.sequence(TE.ApplicativeSeq)
+          )
+        )
+      )
     ),
-    E.getOrElseW(() => []),
-    (scenarios) => scenarios.forEach((fn) => fn(config, token))
-  );
+    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)}`)),
+    TE.toUnion
+  )();
 }
 
 export function handleSummary(data: unknown) {

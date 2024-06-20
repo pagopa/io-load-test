@@ -18,7 +18,7 @@ const generateTestData = () => {
     ROA.sequence(T.ApplicativeSeq),
     T.map(ROA.rights),
     T.map((_) => {
-      console.log(JSON.stringify(_));
+      console.log(JSON.stringify(_.map((r) => r.keyPair)));
     })
   )();
 };

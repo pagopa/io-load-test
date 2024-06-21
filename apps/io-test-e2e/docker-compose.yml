@@ -1,0 +1,56 @@
+version: "2.2"
+
+services:
+
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    networks:
+      - io-lt
+    volumes: 
+      - cache:/data
+
+  generator:
+    build:
+      context: .
+      dockerfile: src/generator/Dockerfile
+    ports:
+      - 8001:8001
+    env_file:
+      - .dockerenv
+    volumes: 
+      - data:/data
+    networks:
+      - io-lt
+  
+  load-test:
+    depends_on:
+      - redis
+      - generator
+    container_name: load-test
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .dockerenv
+    volumes: 
+      - data:/data
+    networks:
+      - io-lt
+
+volumes:
+  certs:
+    driver: local
+  cache:
+    driver: local
+  data:
+    driver: local
+
+networks:
+  io-lt:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450

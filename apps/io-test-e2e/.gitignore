@@ -36,6 +36,7 @@ azure-functions-core-tools
 # Python Environments
 .env
 .venv
+.dockerenv
 env/
 venv/
 ENV/

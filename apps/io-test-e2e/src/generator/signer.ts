@@ -13,6 +13,8 @@ import * as http from "http";
 const app = express();
 app.use(bodyParser.json());
 
+app.get("/info", (_, res) => res.status(200).json("OK"));
+
 app.post("/signature-params", async (req, res) => {
   return pipe(
     req.body,

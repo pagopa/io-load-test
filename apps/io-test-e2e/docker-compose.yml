@@ -1,4 +1,4 @@
-version: "2.2"
+version: "3.6"
 
 services:
 
@@ -11,14 +11,19 @@ services:
     networks:
       - io-lt
     volumes: 
-      - cache:/data
+      - ./cache:/cache
 
   generator:
     build:
       context: .
       dockerfile: src/generator/Dockerfile
+    container_name: generator
     ports:
       - 8001:8001
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8001/info"]
+        interval: 30s
+        timeout: 10s
     env_file:
       - .dockerenv
     volumes: 
@@ -28,16 +33,20 @@ services:
   
   load-test:
     depends_on:
-      - redis
-      - generator
+      redis:
+        condition: service_started
+      generator:
+        condition: service_healthy
     container_name: load-test
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .dockerenv
+    command: run /dist/index.js
     volumes: 
       - data:/data
+      - ./out:/out
     networks:
       - io-lt
 
@@ -47,6 +56,7 @@ volumes:
   cache:
     driver: local
   data:
+  out:
     driver: local
 
 networks:

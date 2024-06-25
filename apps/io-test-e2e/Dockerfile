@@ -16,6 +16,5 @@ FROM grafana/k6:latest
 COPY /package.json /package.json
 COPY --from=builder /usr/src/app/dist /dist
 COPY --from=builder /usr/src/app/node_modules /node_modules
-COPY --from=builder /usr/src/app/data /data
 
 CMD [ "run","/dist/index.js"]

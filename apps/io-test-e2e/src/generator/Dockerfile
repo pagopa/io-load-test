@@ -11,4 +11,6 @@ RUN yarn install \
   && yarn build \
   && yarn webpack
 
+EXPOSE 8001
+
 CMD [ "bash", "./dockerinit.sh"]

@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "start": "dotenv -e .env k6 run --http-debug=\"full\" dist/index.js",
+    "dockerdata": "ts-node ./src/generator/keys.ts > ./data/keys.json",
     "data": "dotenv -e .env ts-node ./src/generator/keys.ts > ./data/keys.json",
     "fixtures": "dotenv -e .env ts-node ./src/generator/fixtures.ts",
     "signer": "ts-node ./src/generator/signer.ts",

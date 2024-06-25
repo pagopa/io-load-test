@@ -61,3 +61,5 @@ src/generated/**/*
 # integration tests
 docker-compose.override.yml
 __integrations__/environments/generated/**
+
+cache

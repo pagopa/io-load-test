@@ -103,7 +103,7 @@ export default async function() {
             E.toError
           )
         ),
-        TE.map(() =>
+        TE.chain(() =>
           pipe(
             config,
             FeatureScanarioEnabledType.decode,

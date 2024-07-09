@@ -37,7 +37,7 @@ export const messageListAndDetail = async (
   messagesDuration.add(getFirstPageMessages.timings.duration);
 
   // Fetch next messages page if present and fetch a message detail
-  pipe(
+  await pipe(
     getResponseBodyAsType(
       getFirstPageMessages.body,
       PaginatedPublicMessagesCollection
@@ -85,23 +85,21 @@ export const messageListAndDetail = async (
     TE.bind("tokenGetDetail", () =>
       TE.tryCatch(() => tokenChecker(thumbprint), E.toError)
     ),
-    TE.chain(({ messageId, tokenGetDetail }) =>
-      TE.tryCatch(async () => {
-        const getMessageDetail = http.get(
-          `${config.IO_BACKEND_BASE_URL}/api/v1/messages/${messageId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${tokenGetDetail}`,
-              "Content-Type": "application/json",
-            },
-            responseType: "text",
-          }
-        );
-        check(getMessageDetail, {
-          "GET Users's message detail returns 200": (r) => r.status === 200,
-        });
-        messageDetailDuration.add(getMessageDetail.timings.duration);
-      }, E.toError)
-    )
-  );
+    TE.map(({ messageId, tokenGetDetail }) =>{
+      const getMessageDetail = http.get(
+        `${config.IO_BACKEND_BASE_URL}/api/v1/messages/${messageId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenGetDetail}`,
+            "Content-Type": "application/json",
+          },
+          responseType: "text",
+        }
+      );
+      check(getMessageDetail, {
+        "GET Users's message detail returns 200": (r) => r.status === 200,
+      });
+      messageDetailDuration.add(getMessageDetail.timings.duration);
+    })
+  )();
 };

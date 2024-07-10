@@ -118,7 +118,9 @@ const fixturesHandler = pipe(
                         }),
                       E.toError
                     ),
-                    TE.chain(
+                    getTe => TE.tryCatch(() => retriableTaskEither(5, 1000)(getTe), E.toError),
+                    TE.chain(TE.fromEither),
+                    TE.chainW(
                       flow(
                         TE.fromEither,
                         TE.mapLeft(
@@ -160,6 +162,8 @@ const fixturesHandler = pipe(
                             }),
                           E.toError
                         ),
+                        updateTe => TE.tryCatch(() => retriableTaskEither(5, 1000)(updateTe), E.toError),
+                        TE.chain(TE.fromEither),
                         TE.chain(
                           flow(
                             TE.fromEither,
@@ -192,7 +196,7 @@ const fixturesHandler = pipe(
                   )
                 ),
                 logTaskEither(`Initialized profile for ${fiscalCode}`),
-                TE.chain((res) => TE.fromTask(T.delay(500)(T.of(res))))
+                TE.chain((res) => TE.fromTask(T.delay(200)(T.of(res))))
               )
             ),
             ROA.sequence(TE.ApplicativeSeq),

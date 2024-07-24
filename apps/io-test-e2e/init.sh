@@ -18,7 +18,7 @@ if [ ! -f $DATA_FOLDER/$DATA_FILENAME ]; then
   fi
 fi
 
-PM2_INSTALLED=$(npm list -g pm2 | grep -c pm2)
+PM2_INSTALLED=$(npm list -g | grep -c pm2)
 
 if [ ! "$PM2_INSTALLED" -eq 1 ]; then
   echo "pm2 is not yet installed. Installing...."

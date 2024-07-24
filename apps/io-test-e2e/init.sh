@@ -18,8 +18,7 @@ if [ ! -f $DATA_FOLDER/$DATA_FILENAME ]; then
   fi
 fi
 
-echo "Starting signer service to generate lollipop signatures ...";
-yarn -s signer &
+pm2 start ./signer.sh
 ppid=$!
 sleep 5 # Wait the lollipop generator start before starting the load test
 

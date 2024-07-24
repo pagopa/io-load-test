@@ -1,4 +1,4 @@
-import { FeatureScanarioEnabledType, getConfigOrThrow } from "./utils/config";
+import { FeatureScenarioEnabledType, getConfigOrThrow } from "./utils/config";
 //@ts-ignore
 import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 //@ts-ignore
@@ -45,13 +45,13 @@ export const options = {
       // How many iterations per timeUnit
       rate: config.rate,
       /**
-       * AzureDiagnostics
+        AzureDiagnostics
         | where backendPoolName_s == "appbackend-app-address-pool"
         | where requestUri_s != "/pagopa/api/v1/user" and requestUri_s != "/bpd/api/v1/user" and httpStatus_d != 404
         | summarize requests = count() by clientIP_s, bin(TimeGenerated, 15m)
         | summarize count() by clientIP_s
         | summarize sum(count_)
-       */
+      */
 
       // Start `rate` iterations per second
       timeUnit: "1s",
@@ -66,10 +66,6 @@ const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 
 export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
 const queueInitializer = keysInitializer(REDIS_CLIENT);
-
-export async function setup() {
-  //await queueInitializer("keys", keys)()
-}
 
 export default async function() {
   await pipe(
@@ -106,7 +102,7 @@ export default async function() {
         TE.chain(() =>
           pipe(
             config,
-            FeatureScanarioEnabledType.decode,
+            FeatureScenarioEnabledType.decode,
             E.map((featureScenarioConfig) =>
               featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
             ),

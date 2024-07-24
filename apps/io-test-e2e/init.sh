@@ -18,7 +18,17 @@ if [ ! -f $DATA_FOLDER/$DATA_FILENAME ]; then
   fi
 fi
 
-pm2 start ./signer.sh
+PM2_INSTALLED=$(npm list -g pm2 | grep -c pm2)
+
+if [ ! "$PM2_INSTALLED" -eq 1 ]; then
+  echo "pm2 is not yet installed. Installing...."
+  npm install pm2 -g
+fi
+
+pm2 delete all
+
+echo "Starting signer service to generate lollipop signatures ..."
+pm2 start signer.config.js
 ppid=$!
 sleep 5 # Wait the lollipop generator start before starting the load test
 

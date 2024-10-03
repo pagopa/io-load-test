@@ -1,0 +1,66 @@
+version: "3.6"
+
+services:
+
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    networks:
+      - io-lt
+    volumes: 
+      - ./cache:/cache
+
+  generator:
+    build:
+      context: .
+      dockerfile: src/generator/Dockerfile
+    container_name: generator
+    ports:
+      - 8001:8001
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8001/info"]
+        interval: 30s
+        timeout: 10s
+    env_file:
+      - .dockerenv
+    volumes: 
+      - data:/data
+    networks:
+      - io-lt
+  
+  load-test:
+    depends_on:
+      redis:
+        condition: service_started
+      generator:
+        condition: service_healthy
+    container_name: load-test
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .dockerenv
+    command: run /dist/index.js
+    volumes: 
+      - data:/data
+      - ./out:/out
+    networks:
+      - io-lt
+
+volumes:
+  certs:
+    driver: local
+  cache:
+    driver: local
+  data:
+  out:
+    driver: local
+
+networks:
+  io-lt:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450

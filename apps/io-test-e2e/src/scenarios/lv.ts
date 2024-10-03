@@ -57,7 +57,7 @@ export const lvScenario = (
     url: config.AUTH_BACKEND_BASE_URL + "/api/v1/fast-login",
   };
   const signerResponse = http.post(
-    `http://localhost:8001/signature-params`,
+    `${config.SIGNER_BACKEND_BASE_URL}/signature-params`,
     JSON.stringify(parameters),
     {
       headers: {

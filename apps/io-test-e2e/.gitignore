@@ -36,6 +36,7 @@ azure-functions-core-tools
 # Python Environments
 .env
 .venv
+.dockerenv
 env/
 venv/
 ENV/
@@ -60,3 +61,5 @@ src/generated/**/*
 # integration tests
 docker-compose.override.yml
 __integrations__/environments/generated/**
+
+cache

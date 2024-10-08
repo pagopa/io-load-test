@@ -11,6 +11,7 @@ import { BooleanFromString } from "io-ts-types";
 export const FeatureScenarioType = t.union([
   t.literal("TRIAL"),
   t.literal("MESSAGE_DETAIL"),
+  t.literal("WALLET"),
 ]);
 export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
 
@@ -18,13 +19,15 @@ export const FeatureScanarioEnabledType = t.type({
   FEATURE_ENABLED: t.literal(true),
   SCENARIOS: CommaSeparatedListOf(FeatureScenarioType),
 });
-export type FeatureScanarioEnabledType = t.TypeOf<typeof FeatureScanarioEnabledType>;
+export type FeatureScanarioEnabledType = t.TypeOf<
+  typeof FeatureScanarioEnabledType
+>;
 
 export const FeatureScenarioConfig = t.union([
   t.type({
     FEATURE_ENABLED: t.literal(false),
   }),
-  FeatureScanarioEnabledType
+  FeatureScanarioEnabledType,
 ]);
 export type FeatureScenarioConfig = t.TypeOf<typeof FeatureScenarioConfig>;
 
@@ -45,9 +48,9 @@ export type FixturesEnabledConfig = t.TypeOf<typeof FixturesEnabledConfig>;
 
 export const FixturesConfig = t.union([
   t.type({
-    FIXTURES_ENABLED: t.literal(false)
+    FIXTURES_ENABLED: t.literal(false),
   }),
-  FixturesEnabledConfig
+  FixturesEnabledConfig,
 ]);
 export type FixturesConfig = t.TypeOf<typeof FixturesConfig>;
 
@@ -57,7 +60,7 @@ export const IConfig = t.intersection([
     IO_BACKEND_BASE_URL: t.string,
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
-    REDIS_CONN_STRING: NonEmptyString
+    REDIS_CONN_STRING: NonEmptyString,
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -86,7 +89,7 @@ export const getConfigOrThrow = (
         env.FIXTURES_ENABLED,
         BooleanFromString.decode,
         E.getOrElse(() => false)
-      )
+      ),
     }),
     IConfig.decode,
     E.getOrElseW((errs) => {

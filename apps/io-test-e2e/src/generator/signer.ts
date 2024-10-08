@@ -40,4 +40,15 @@ app.post("/signature-params", async (req, res) => {
     )
   )();
 });
+
+app.get("/random-keys", async (_req, res) => {
+  const keyPair = await jose.generateKeyPair("ES256");
+  const jwk = await jose.exportJWK(keyPair.publicKey);
+  const kid = await jose.calculateJwkThumbprint(jwk);
+  res.json({
+    ...jwk,
+    kid,
+  });
+});
+
 http.createServer(app).listen(8001);

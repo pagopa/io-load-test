@@ -36,22 +36,20 @@ const config = getConfigOrThrow(__ENV);
 export const options = {
   scenarios: {
     contacts: {
-      executor: "constant-arrival-rate",
+      executor: "ramping-arrival-rate",
 
-      // How long the test lasts
-      duration: config.duration,
+      startRate: 1000,
+
+      stages: [
+        // {target: 500, duration: "10m"},{target: 500, duration: "2m"},{target: 500, duration: "2m"}, 
+        // {target: 1000, duration: "10m"}, {target: 1000, duration: "2m"}, 
+        {target: 2000, duration: "15m"}, {target: 2000, duration: "2m"}, 
+        {target: 3000, duration: "10m"}, {target: 3000, duration: "2m"}, 
+        {target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
+      ],
+
 
       maxVUs: config.maxVUs,
-      // How many iterations per timeUnit
-      rate: config.rate,
-      /**
-        AzureDiagnostics
-        | where backendPoolName_s == "appbackend-app-address-pool"
-        | where requestUri_s != "/pagopa/api/v1/user" and requestUri_s != "/bpd/api/v1/user" and httpStatus_d != 404
-        | summarize requests = count() by clientIP_s, bin(TimeGenerated, 15m)
-        | summarize count() by clientIP_s
-        | summarize sum(count_)
-      */
 
       // Start `rate` iterations per second
       timeUnit: "1s",

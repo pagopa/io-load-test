@@ -59,7 +59,9 @@ const getNonce = async (
   return nonce;
 };
 
-// Function to handle wallet instance creation
+/* Function to handle wallet instance creation.
+ * Warning: This work only with fiscal codes that starts with LVTEST00A00
+ */
 export const walletInstanceCreation = async (
   config: IConfig,
   thumbprint: string,

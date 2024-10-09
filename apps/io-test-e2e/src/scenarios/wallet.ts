@@ -1,24 +1,31 @@
-//@ts-ignore
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
-//@ts-ignore
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
 import { check, fail } from "k6";
 import { Trend } from "k6/metrics";
 import http from "k6/http";
 import { IConfig } from "../utils/config";
-import { CreateKeyResponse, NonceResponse } from "../types/wallet";
+import {
+  CreateKeyResponse,
+  CreateWalletAttestationResponse,
+  NonceResponse,
+} from "../types/wallet";
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 
+// Define metrics
+const localUrl = "http://localhost:8001";
 const createWalletInstanceDuration = new Trend("wallet_create_wallet_instance");
+const createWalletAttestationDuration = new Trend(
+  "wallet_create_wallet_attestation"
+);
 
-export const walletInstanceCreation = async (
+// Function to get nonce
+const getNonce = async (
   config: IConfig,
   thumbprint: string,
   tokenChecker: (thumbprint: string) => Promise<string>
 ) => {
-  const getNonce = http.get(
+  // Perform HTTP GET request for nonce
+  const response = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/nonce`,
     {
       headers: {
@@ -30,46 +37,63 @@ export const walletInstanceCreation = async (
     }
   );
 
-  check(getNonce, {
+  // Check for 200 status
+  check(response, {
     "(wallet) GET nonce returns 200": (r) => r.status === 200,
   });
 
+  // Decode the nonce using fp-ts Either
   const nonce = pipe(
-    getNonce.json(),
+    response.json(),
     NonceResponse.decode,
-    E.map((_) => _.nonce),
-    E.getOrElseW((_) => {
+    E.map((data) => data.nonce),
+    E.getOrElseW((errors) => {
       console.error("Error decoding nonce");
-      fail(readableReportSimplified(_));
+      fail(readableReportSimplified(errors));
     })
   );
 
-  createWalletInstanceDuration.add(getNonce.timings.duration);
+  // Add duration to metric
+  createWalletInstanceDuration.add(response.timings.duration);
 
-  const createKey = http.get(`http://localhost:8001/random-keys`, {
-    headers: {
-      "Content-Type": "application/json",
-    },
+  return nonce;
+};
+
+// Function to handle wallet instance creation
+export const walletInstanceCreation = async (
+  config: IConfig,
+  thumbprint: string,
+  tokenChecker: (thumbprint: string) => Promise<string>
+) => {
+  // Fetch nonce
+  const nonce = await getNonce(config, thumbprint, tokenChecker);
+
+  // Create key request
+  const createKeyResponse = http.get(`${localUrl}/random-key`, {
+    headers: { "Content-Type": "application/json" },
     responseType: "text",
   });
 
-  const walletKeyKid = pipe(
-    createKey.json(),
+  // Decode created key
+  const walletKeyTag = pipe(
+    createKeyResponse.json(),
     CreateKeyResponse.decode,
-    E.map((_) => _.kid),
-    E.getOrElseW((_) => {
+    E.map((data) => data.kid),
+    E.getOrElseW((errors) => {
       console.error("Error decoding created key");
-      fail(readableReportSimplified(_));
+      fail(readableReportSimplified(errors));
     })
   );
 
+  // Wallet instance creation parameters
   const walletInstanceCreationParams = {
     challenge: nonce,
-    hardware_key_tag: walletKeyKid,
+    hardware_key_tag: walletKeyTag,
     key_attestation: "test",
   };
 
-  const createWalletInstance = http.post(
+  // Create wallet instance via POST
+  const createWalletInstanceResponse = http.post(
     `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/wallet-instances`,
     JSON.stringify(walletInstanceCreationParams),
     {
@@ -82,9 +106,67 @@ export const walletInstanceCreation = async (
     }
   );
 
-  check(createWalletInstance, {
+  // Check for 204 status
+  check(createWalletInstanceResponse, {
     "(wallet) POST wallet-instances returns 204": (r) => r.status === 204,
   });
 
-  createWalletInstanceDuration.add(createWalletInstance.timings.duration);
+  // Add duration to metric
+  createWalletInstanceDuration.add(
+    createWalletInstanceResponse.timings.duration
+  );
+
+  // Fetch second nonce
+  const secondNonce = await getNonce(config, thumbprint, tokenChecker);
+
+  // Create wallet attestation request (WAR)
+  const createWarResponse = http.post(
+    `${localUrl}/wallet-attestation-request`,
+    JSON.stringify({ nonce: secondNonce, key_tag: walletKeyTag }),
+    {
+      headers: { "Content-Type": "application/json" },
+      responseType: "text",
+    }
+  );
+
+  // Decode WAR
+  const createdWar = pipe(
+    createWarResponse.json(),
+    CreateWalletAttestationResponse.decode,
+    E.map((data) => data.wallet_attestation_request),
+    E.getOrElseW((errors) => {
+      console.error("Error decoding WAR");
+      fail(readableReportSimplified(errors));
+    })
+  );
+
+  // Wallet attestation creation parameters
+  const walletAttestationCreationParams = {
+    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    assertion: createdWar,
+  };
+
+  // Create wallet attestation
+  const createWalletAttestationResponse = http.post(
+    `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/token`,
+    JSON.stringify(walletAttestationCreationParams),
+    {
+      headers: {
+        Accept: "*/*",
+        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        "Content-Type": "application/json",
+      },
+      responseType: "text",
+    }
+  );
+
+  // Check for 200 status
+  check(createWalletAttestationResponse, {
+    "(wallet) POST token returns 200": (r) => r.status === 200,
+  });
+
+  // Add duration to metric
+  createWalletAttestationDuration.add(
+    createWalletAttestationResponse.timings.duration
+  );
 };

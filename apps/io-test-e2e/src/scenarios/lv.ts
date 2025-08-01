@@ -25,7 +25,7 @@ export const lvScenario = (
   config: IConfig,
   key: GeneratedKeypair
 ): NonEmptyString => {
-  
+
   let duration = 0;
   // Generate Nonce
   const generateNonceResponse = http.post(

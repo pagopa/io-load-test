@@ -9,6 +9,8 @@ const featuredServicesDuration = new Trend("get_featured_services");
 const featuredInstitutionsDuration = new Trend("get_featured_institutions");
 const institutionsPageOneDuration = new Trend("get_institutions_page_1");
 const institutionsPageTwoDuration = new Trend("get_institutions_page_2");
+const bonusElettrodomesticiServiceDuration = new Trend("get_bonus_elettrodomestici_service");
+const bonusElettrodomesticiServicePreferencesDuration = new Trend("get_bonus_elettrodomestici_service_preferences");
 
 /* Function to handle user landing on the services section.
  */
@@ -76,6 +78,44 @@ export const loadingServicesAppTab = async (
     });
     institutionsPageTwoDuration.add(institutionsSecondPage.timings.duration);
 
-    // TODO: Add APIs call to getService and getServicePreferences for the bonus elettrodomentici service
+    // Retrieve Bonus Elettrodomestici service
+    // Estimated 5,5k req/h
+    const getBonusService = http.get(
+      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
+      {
+        headers: {
+          Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "text",
+      }
+    );
+    check(getBonusService, {
+      "GET Bonus Elettrodomestici Service returns 200": (r) => [200, 401].includes(r.status),
+    });
+    if (getBonusService.status !== 200){
+      console.log(`GET Bonus Elettrodomestici Service returns an error => statusCode=${getBonusService.status}, detail=${getBonusService.body}`)
+    }
+    bonusElettrodomesticiServiceDuration.add(getBonusService.timings.duration);
+
+    // Retrieve Bonus Elettrodomestici service preferences
+    // Estimated 5,5k req/h
+    const getBonusServicePreferences = http.get(
+      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
+      {
+        headers: {
+          Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "text",
+      }
+    );
+    check(getBonusServicePreferences, {
+      "GET Bonus Elettrodomestici Service preferences returns 200": (r) => [200, 401].includes(r.status),
+    });
+    if (getBonusServicePreferences.status !== 200){
+      console.log(`GET Bonus Elettrodomestici Service preferences returns an error => statusCode=${getBonusServicePreferences.status}, detail=${getBonusServicePreferences.body}`)
+    }
+    bonusElettrodomesticiServicePreferencesDuration.add(getBonusServicePreferences.timings.duration);
   }
 }

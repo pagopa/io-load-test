@@ -98,7 +98,7 @@ export const appOpening = async (
       responseType: "text",
     });
     check(deleteUserDataProcessing, {
-      "DELETE User Data Processing returns 200": (r) => [200, 404, 401].includes(r.status),
+      "GET User Data Processing for delete returns 200": (r) => [200, 404, 401].includes(r.status),
     });
     userDataProcessingDuration.add(deleteUserDataProcessing.timings.duration);
   }

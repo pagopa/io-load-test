@@ -46,7 +46,7 @@ export const loadingServicesAppTab = async (
       responseType: "text",
     });
     check(futuredInstitutions, {
-      "GET featured services returns 200": (r) => [200, 401].includes(r.status),
+      "GET featured institutions returns 200": (r) => [200, 401].includes(r.status),
     });
     featuredInstitutionsDuration.add(futuredInstitutions.timings.duration);
 
@@ -81,7 +81,7 @@ export const loadingServicesAppTab = async (
     // Retrieve Bonus Elettrodomestici service
     // Estimated 5,5k req/h
     const getBonusService = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
+      `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
       {
         headers: {
           Authorization: `Bearer ${await tokenChecker(thumbprint)}`,

@@ -106,6 +106,7 @@ export const lvScenario = (
     E.map((_) => _.token),
     E.getOrElseW((_) => {
       console.error(`refreshResponse => ${refreshSession.status}`)
+      console.error(`FiscalCode => ${key.fiscalCode} | Thumbprint => ${key.thumbprint}`)
       console.error(`Error decoding the refresh session response|DETAIL=${errorsToReadableMessages(_).join("|")}`);
       fail(readableReportSimplified(_));
     })

@@ -50,6 +50,26 @@ export const appOpening = async (
     console.log(`Get Session returns an error => statusCode=${getSession.status}, detail=${getSession.body}`)
   }
   sessionDuration.add(getSession.timings.duration);
+  const executeSecondGetSession = randomIntBetween(1, 10) < 6;
+  if(executeSecondGetSession){
+    const getSession2 = http.get(
+      `${config.AUTH_BACKEND_BASE_URL}/api/v1/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "text",
+      }
+    );
+    check(getSession2, {
+      "GET Get Session returns 200": (r) => [200, 401].includes(r.status),
+    });
+    if (getSession2.status !== 200){
+      console.log(`Get Session returns an error => statusCode=${getSession2.status}, detail=${getSession2.body}`)
+    }
+    sessionDuration.add(getSession2.timings.duration);
+  }
 
   // Retrieve the profile using the new token
   // Peak 70k req/h

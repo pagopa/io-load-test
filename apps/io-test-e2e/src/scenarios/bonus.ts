@@ -19,11 +19,11 @@ export const loadingServicesAppTab = async (
   thumbprint: string,
   tokenChecker: (thumbprint: string) => Promise<string>
 ) => {
-  const executeServicesApis = randomIntBetween(1, 13) == 1;
+  const executeServicesApis = randomIntBetween(1, 100) < 41;
   if (executeServicesApis) {
     console.log(`executeServicesApis`);
     // Get featured services
-    // Peak 5.5k req/h
+    // Peak 29k req/h
     const futuredServices = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/services/featured`, {
       headers: {
         Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
@@ -37,7 +37,7 @@ export const loadingServicesAppTab = async (
     featuredServicesDuration.add(futuredServices.timings.duration);
 
     // Get featured institutions
-    // Peak 5.5k req/h
+    // Peak 29k req/h
     const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`, {
       headers: {
         Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
@@ -51,7 +51,7 @@ export const loadingServicesAppTab = async (
     featuredInstitutionsDuration.add(futuredInstitutions.timings.duration);
 
     // List institutions page 1
-    // Peak 5.5k req/h
+    // Peak 29k req/h
     const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`, {
       headers: {
         Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
@@ -65,21 +65,24 @@ export const loadingServicesAppTab = async (
     institutionsPageOneDuration.add(institutionsFirstPage.timings.duration);
 
     // List institutions page 2
-    // Peak 2.9k req/h
-    const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`, {
-      headers: {
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
-        "Content-Type": "application/json",
-      },
-      responseType: "text",
-    });
-    check(institutionsSecondPage, {
-      "GET institutions page 2 returns 200": (r) => [200, 401].includes(r.status),
-    });
-    institutionsPageTwoDuration.add(institutionsSecondPage.timings.duration);
+    // Peak 17k req/h
+    const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
+    if (executeIstitutionsSecondPage) {
+      const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`, {
+        headers: {
+          Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "text",
+      });
+      check(institutionsSecondPage, {
+        "GET institutions page 2 returns 200": (r) => [200, 401].includes(r.status),
+      });
+      institutionsPageTwoDuration.add(institutionsSecondPage.timings.duration);
+    }
 
     // Retrieve Bonus Elettrodomestici service
-    // Estimated 5,5k req/h
+    // Estimated 29k req/h
     const getBonusService = http.get(
       `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
       {
@@ -99,7 +102,7 @@ export const loadingServicesAppTab = async (
     bonusElettrodomesticiServiceDuration.add(getBonusService.timings.duration);
 
     // Retrieve Bonus Elettrodomestici service preferences
-    // Estimated 5,5k req/h
+    // Estimated 29k req/h
     const getBonusServicePreferences = http.get(
       `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
       {

@@ -36,22 +36,19 @@ const config = getConfigOrThrow(__ENV);
 export const options = {
   scenarios: {
     contacts: {
-      executor: "constant-arrival-rate",
+      executor: "ramping-arrival-rate",
 
-      // How long the test lasts
-      duration: config.duration,
+      startRate: 1,
+
+      stages: [
+        {target: 52, duration: "5m"},{target: 52, duration: "2m"},
+        {target: 470, duration: "2m"}, {target: 470, duration: "2m"},
+        //{target: 10, duration: "1m"}, {target: 100, duration: "1m"},
+        //{target: 100, duration: "2m"}, {target: 100, duration: "2m"},
+        //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
+      ],
 
       maxVUs: config.maxVUs,
-      // How many iterations per timeUnit
-      rate: config.rate,
-      /**
-        AzureDiagnostics
-        | where backendPoolName_s == "appbackend-app-address-pool"
-        | where requestUri_s != "/pagopa/api/v1/user" and requestUri_s != "/bpd/api/v1/user" and httpStatus_d != 404
-        | summarize requests = count() by clientIP_s, bin(TimeGenerated, 15m)
-        | summarize count() by clientIP_s
-        | summarize sum(count_)
-      */
 
       // Start `rate` iterations per second
       timeUnit: "1s",
@@ -119,7 +116,7 @@ export default async function() {
         )
       )
     ),
-    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)}`)),
+    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)} | ${e.stack} | ${e.message}`)),
     TE.toUnion
   )();
 }

@@ -7,13 +7,18 @@ import * as J from "fp-ts/Json";
 import * as E from "fp-ts/Either";
 import * as O from "fp-ts/Option";
 
-export const checkAndGetToken = (redisClient: redis.Client) => async (
+export const
+  checkAndGetToken = (redisClient: redis.Client) => async (
   thumbprint: string
 ) => {
   let token: string = "";
   while (token === "") {
     sleep(0.5);
-    token = await redisClient.get(thumbprint);
+    try {
+      token = await redisClient.get(thumbprint);
+    } catch(err) {
+      token = ""
+    }
   }
   return token;
 };

@@ -41,10 +41,10 @@ export const options = {
       startRate: 1000,
 
       stages: [
-        // {target: 500, duration: "10m"},{target: 500, duration: "2m"},{target: 500, duration: "2m"}, 
-        // {target: 1000, duration: "10m"}, {target: 1000, duration: "2m"}, 
-        {target: 2000, duration: "15m"}, {target: 2000, duration: "2m"}, 
-        {target: 3000, duration: "10m"}, {target: 3000, duration: "2m"}, 
+        // {target: 500, duration: "10m"},{target: 500, duration: "2m"},{target: 500, duration: "2m"},
+        // {target: 1000, duration: "10m"}, {target: 1000, duration: "2m"},
+        {target: 2000, duration: "15m"}, {target: 2000, duration: "2m"},
+        {target: 3000, duration: "10m"}, {target: 3000, duration: "2m"},
         {target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
       ],
 
@@ -117,7 +117,7 @@ export default async function() {
         )
       )
     ),
-    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)}`)),
+    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)} | ${e.stack} | ${e.message}`)),
     TE.toUnion
   )();
 }

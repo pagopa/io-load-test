@@ -2,6 +2,7 @@ import { FeatureScenarioType } from "../utils/config";
 import { loadingServicesAppTab } from "./bonus";
 import { appOpening } from "./landing";
 import { messageListAndDetail } from "./messages";
+import { loadingOnlyServicesAppTab } from "./services";
 import { trialSubscription } from "./trial";
 import { walletInstanceCreation } from "./wallet";
 
@@ -17,5 +18,7 @@ export const getFeatureScenario = (scenarioType: FeatureScenarioType) => {
       return walletInstanceCreation;
     case "BONUS":
       return loadingServicesAppTab;
+    case "SERVICES":
+      return loadingOnlyServicesAppTab;
   }
 };

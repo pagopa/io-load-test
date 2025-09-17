@@ -11,6 +11,7 @@ import * as TE from "fp-ts/TaskEither";
 import { pipe } from "fp-ts/lib/function";
 import { PaginatedPublicMessagesCollection } from "../generated/definitions/backend/PaginatedPublicMessagesCollection";
 import { getResponseBodyAsType } from "../utils/responses";
+import { getK6DefaultHttpParams } from "../utils/http";
 
 const messagesDuration = new Trend("get_messages_duration");
 const messageDetailDuration = new Trend("get_message_detail_duration");
@@ -24,11 +25,7 @@ export const messageListAndDetail = async (
   const getFirstPageMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true`,
     {
-      headers: {
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
-        "Content-Type": "application/json",
-      },
-      responseType: "text",
+      ...(await getK6DefaultHttpParams(thumbprint, tokenChecker))
     }
   );
   check(getFirstPageMessages, {

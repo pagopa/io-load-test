@@ -41,10 +41,10 @@ export const options = {
       startRate: 1,
 
       stages: [
-        {target: 52, duration: "5m"},{target: 52, duration: "2m"},
-        {target: 470, duration: "2m"}, {target: 470, duration: "2m"},
-        //{target: 10, duration: "1m"}, {target: 100, duration: "1m"},
-        //{target: 100, duration: "2m"}, {target: 100, duration: "2m"},
+        //{target: 25, duration: "2m"},{target: 25, duration: "1m"},
+        //{target: 200, duration: "2m"}, {target: 200, duration: "3m"},
+        {target: 10, duration: "1m"}, {target: 10, duration: "1m"},
+        //{target: 50, duration: "2m"}, {target: 50, duration: "3m"},
         //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
       ],
 
@@ -55,6 +55,7 @@ export const options = {
 
       // Pre-allocate VUs (concurrent users)
       preAllocatedVUs: config.preAllocatedVUs,
+      gracefulStop: "1m"
     },
   },
 };

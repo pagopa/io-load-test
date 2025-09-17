@@ -13,7 +13,8 @@ export const FeatureScenarioType = t.union([
   t.literal("TRIAL"),
   t.literal("MESSAGE_DETAIL"),
   t.literal("WALLET"),
-  t.literal("BONUS")
+  t.literal("BONUS"),
+  t.literal("SERVICES"),
 ]);
 export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
 
@@ -22,13 +23,15 @@ export const FeatureScenarioEnabledType = t.type({
   SCENARIOS: CommaSeparatedListOf(FeatureScenarioType),
 });
 
-export type FeatureScenarioEnabledType = t.TypeOf<typeof FeatureScenarioEnabledType>;
+export type FeatureScenarioEnabledType = t.TypeOf<
+  typeof FeatureScenarioEnabledType
+>;
 
 export const FeatureScenarioConfig = t.union([
   t.type({
     FEATURE_ENABLED: t.literal(false),
   }),
-  FeatureScenarioEnabledType
+  FeatureScenarioEnabledType,
 ]);
 export type FeatureScenarioConfig = t.TypeOf<typeof FeatureScenarioConfig>;
 

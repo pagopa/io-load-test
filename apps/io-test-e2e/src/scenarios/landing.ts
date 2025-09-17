@@ -9,6 +9,7 @@ import { Counter, Trend } from "k6/metrics";
 import http from "k6/http";
 import { IConfig } from "../utils/config";
 import { getK6DefaultHttpParams } from "../utils/http";
+import { trackRequest } from "../utils/metrics";
 
 const pingDuration = new Trend("get_ping_duration");
 const pingFailure = new Counter("get_ping_failure");
@@ -43,11 +44,14 @@ export const appOpening = async (
   // Check if App is online
   // Peak 650k req/h
   const isOnline = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/ping`);
-  isOnline.status === 204 ? pingSuccess.add(1) : pingFailure.add(1);
-  check(isOnline, {
-    "GET Status returns 200": (r) => r.status === 204,
+  trackRequest({
+    response: isOnline,
+    checkTitle: "GET Status",
+    successCounter: pingSuccess,
+    failureCounter: pingFailure,
+    durationTrend: pingDuration,
+    successStatuses: [204],
   });
-  pingDuration.add(isOnline.timings.duration);
 
   // Retrieve the session using the new token
   // Peak 115k req/h
@@ -57,17 +61,15 @@ export const appOpening = async (
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     }
   );
-  check(getSession, {
-    "GET Get Session returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: getSession,
+    checkTitle: "GET Get Session",
+    successCounter: sessionSuccess,
+    failureCounter: sessionFailure,
+    durationTrend: sessionDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
-  if (getSession.status !== 200){
-    console.log(`Get Session returns an error => statusCode=${getSession.status}, detail=${getSession.body}`)
-    sessionFailure.add(1);
-  } else {
-    sessionSuccess.add(1);
-  }
-
-  sessionDuration.add(getSession.timings.duration);
   const executeSecondGetSession = randomIntBetween(1, 10) < 6;
   if(executeSecondGetSession){
     const getSession2 = http.get(
@@ -76,16 +78,15 @@ export const appOpening = async (
         ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
       }
     );
-    check(getSession2, {
-      "GET Get Session returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: getSession2,
+      checkTitle: "GET Get Session",
+      successCounter: sessionSuccess,
+      failureCounter: sessionFailure,
+      durationTrend: sessionDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    if (getSession2.status !== 200){
-      console.log(`Get Session returns an error => statusCode=${getSession2.status}, detail=${getSession2.body}`)
-      sessionFailure.add(1);
-    } else {
-      sessionSuccess.add(1);
-    }
-    sessionDuration.add(getSession2.timings.duration);
   }
 
   // Retrieve the profile using the new token
@@ -93,8 +94,14 @@ export const appOpening = async (
   const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`, {
     ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
   });
-  check(getProfile, {
-    "GET Profile returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: getProfile,
+    checkTitle: "GET Profile",
+    successCounter: profileSuccess,
+    failureCounter: profileFailure,
+    durationTrend: profileDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
 
   // Service preferences require a non Legacy service preferences mode
@@ -106,16 +113,9 @@ export const appOpening = async (
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     });
     check(upsertProfile, {
-      "POST Update Profile returns 200": (r) => [200, 401].includes(r.status),
+      "POST Update Profile": (r) => [200, 401].includes(r.status),
     });
   }
-  if (getProfile.status !== 200){
-    console.log(`Get Profile returns an error => statusCode=${getProfile.status}, detail=${getProfile.body}`);
-    profileFailure.add(1);
-  } else {
-    profileSuccess.add(1);
-  }
-  profileDuration.add(getProfile.timings.duration);
 
   // Check if a delete profile operation is in progress
   // Peak 2.8k req/h
@@ -125,11 +125,15 @@ export const appOpening = async (
     const deleteUserDataProcessing = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/user-data-processing/DELETE`, {
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     });
-    [200, 404, 401].includes(deleteUserDataProcessing.status) ? userDataProcessingSuccess.add(1) : userDataProcessingFailure.add(1);
-    check(deleteUserDataProcessing, {
-      "GET User Data Processing for delete returns 200": (r) => [200, 404, 401].includes(r.status),
+    trackRequest({
+      response: deleteUserDataProcessing,
+      checkTitle: "GET User Data Processing for delete",
+      successCounter: userDataProcessingSuccess,
+      failureCounter: userDataProcessingFailure,
+      durationTrend: userDataProcessingDuration,
+      successStatuses: [200, 404],
+      skipStatuses: [401]
     });
-    userDataProcessingDuration.add(deleteUserDataProcessing.timings.duration);
   }
 
 
@@ -138,32 +142,30 @@ export const appOpening = async (
   const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/whitelisted-fiscal-code`, {
     ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
   });
-  check(isFiscalCodeWhitelisted, {
-    "GET FiscalCode Whitelist returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: isFiscalCodeWhitelisted,
+    checkTitle: "GET FiscalCode Whitelist",
+    successCounter: fiscalCodeWhitelistSuccess,
+    failureCounter: fiscalCodeWhitelistFailure,
+    durationTrend: fiscalCodeWhitelistDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
-  if (isFiscalCodeWhitelisted.status !== 200){
-    console.log(`Get FiscalCode Whitelist returns an error => statusCode=${isFiscalCodeWhitelisted.status}, detail=${isFiscalCodeWhitelisted.body}`)
-    fiscalCodeWhitelistFailure.add(1);
-  } else {
-    fiscalCodeWhitelistSuccess.add(1);
-  }
-  fiscalCodeWhitelistDuration.add(isFiscalCodeWhitelisted.timings.duration);
 
   //check wallet instance status
   // Peak 55k req/h
   const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/wallet-instances/current/status`, {
     ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
   });
-  check(getWalletInstanceStatus, {
-    "GET Wallet Instance Status returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: getWalletInstanceStatus,
+    checkTitle: "GET Wallet Instance Status",
+    successCounter: walletInstanceStatusSuccess,
+    failureCounter: walletInstanceStatusFailure,
+    durationTrend: walletInstanceStatusDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
-  if (getWalletInstanceStatus.status !== 200){
-    console.log(`Get Wallet Instance Status returns an error => statusCode=${getWalletInstanceStatus.status}, detail=${getWalletInstanceStatus.body}`)
-    walletInstanceStatusFailure.add(1);
-  } else {
-    walletInstanceStatusSuccess.add(1);
-  }
-  walletInstanceStatusDuration.add(getWalletInstanceStatus.timings.duration);
 
   // Retrieve SEND activation status
   // Peak 56k req/h
@@ -173,16 +175,15 @@ export const appOpening = async (
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     }
   );
-  check(getSendActivationStatus, {
-    "GET SEND activation status returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: getSendActivationStatus,
+    checkTitle: "GET SEND activation status",
+    successCounter: sendActivationStatusSuccess,
+    failureCounter: sendActivationStatusFailure,
+    durationTrend: sendActivationStatusDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
-  if (getSendActivationStatus.status !== 200){
-    console.log(`Get SEND activation returns an error => statusCode=${getSendActivationStatus.status}, detail=${getSendActivationStatus.body}`)
-    sendActivationStatusFailure.add(1);
-  } else {
-    sendActivationStatusSuccess.add(1);
-  }
-  sendActivationStatusDuration.add(getSendActivationStatus.timings.duration);
 
   // Retrieve users's messages
   // Peak 56k req/h
@@ -192,14 +193,13 @@ export const appOpening = async (
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     }
   );
-  check(getMessages, {
-    "GET Users's messages returns 200": (r) => [200, 401].includes(r.status),
+  trackRequest({
+    response: getMessages,
+    checkTitle: "GET Users's messagess",
+    successCounter: messagesSuccess,
+    failureCounter: messagesFailure,
+    durationTrend: messagesDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
   });
-  if (getMessages.status !== 200){
-    console.log(`Get Messages returns an error => statusCode=${getMessages.status}, detail=${getMessages.body}`)
-    messagesFailure.add(1);
-  } else {
-    messagesSuccess.add(1);
-  }
-  messagesDuration.add(getMessages.timings.duration);
 };

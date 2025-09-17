@@ -5,7 +5,6 @@ import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporte
 import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
 import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
-import { appOpening } from "./scenarios/landing";
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
@@ -89,12 +88,6 @@ export default async function() {
             TE.orElseW(() =>
               pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
             )
-          )
-        ),
-        TE.chain(() =>
-          TE.tryCatch(
-            () => appOpening(config, key.thumbprint, tokenChecker),
-            E.toError
           )
         ),
         TE.chain(() =>

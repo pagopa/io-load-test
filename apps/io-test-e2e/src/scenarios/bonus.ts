@@ -1,10 +1,10 @@
 import http from "k6/http";
 import { IConfig } from "../utils/config";
-import { check } from "k6";
 // @ts-ignore
 import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 import { Counter, Trend } from "k6/metrics";
 import { getK6DefaultHttpParams } from "../utils/http";
+import { trackRequest } from "../utils/metrics";
 
 const featuredServicesDuration = new Trend("get_featured_services");
 const featuredServicesSuccess = new Counter("get_featured_services_success");
@@ -46,11 +46,15 @@ export const loadingServicesAppTab = async (
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     }
     );
-    [200, 401].includes(futuredServices.status) ? featuredServicesSuccess.add(1) : featuredServicesFailure.add(1);
-    check(futuredServices, {
-      "GET featured services returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: futuredServices,
+      checkTitle: "GET featured services",
+      successCounter: featuredServicesSuccess,
+      failureCounter: featuredServicesFailure,
+      durationTrend: featuredServicesDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    featuredServicesDuration.add(futuredServices.timings.duration);
 
 
     // Get featured institutions
@@ -58,22 +62,30 @@ export const loadingServicesAppTab = async (
     const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`, {
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     });
-    [200, 401].includes(futuredInstitutions.status) ? featuredInstitutionsSuccess.add(1) : featuredInstitutionsFailure.add(1);
-    check(futuredInstitutions, {
-      "GET featured institutions returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: futuredInstitutions,
+      checkTitle: "GET featured institutions",
+      successCounter: featuredInstitutionsSuccess,
+      failureCounter: featuredInstitutionsFailure,
+      durationTrend: featuredInstitutionsDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    featuredInstitutionsDuration.add(futuredInstitutions.timings.duration);
 
     // List institutions page 1
     // Peak 29k req/h
     const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`, {
       ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
     });
-    [200, 401].includes(institutionsFirstPage.status) ? institutionsPageOneSuccess.add(1) : institutionsPageOneFailure.add(1);
-    check(institutionsFirstPage, {
-      "GET institutions page 1 returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: institutionsFirstPage,
+      checkTitle: "GET institutions page 1",
+      successCounter: institutionsPageOneSuccess,
+      failureCounter: institutionsPageOneFailure,
+      durationTrend: institutionsPageOneDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    institutionsPageOneDuration.add(institutionsFirstPage.timings.duration);
 
     // List institutions page 2
     // Peak 17k req/h
@@ -82,11 +94,15 @@ export const loadingServicesAppTab = async (
       const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`, {
         ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
       });
-      [200, 401].includes(institutionsSecondPage.status) ? institutionsPageTwoSuccess.add(1) : institutionsPageTwoFailure.add(1);
-      check(institutionsSecondPage, {
-        "GET institutions page 2 returns 200": (r) => [200, 401].includes(r.status),
+      trackRequest({
+        response: institutionsSecondPage,
+        checkTitle: "GET institutions page 2",
+        successCounter: institutionsPageTwoSuccess,
+        failureCounter: institutionsPageTwoFailure,
+        durationTrend: institutionsPageTwoDuration,
+        successStatuses: [200],
+        skipStatuses: [401]
       });
-      institutionsPageTwoDuration.add(institutionsSecondPage.timings.duration);
     }
 
     // Retrieve Bonus Elettrodomestici service
@@ -97,14 +113,15 @@ export const loadingServicesAppTab = async (
         ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
       }
     );
-    [200, 401].includes(getBonusService.status) ? bonusElettrodomesticiServiceSuccess.add(1) : bonusElettrodomesticiServiceFailure.add(1);
-    check(getBonusService, {
-      "GET Bonus Elettrodomestici Service returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: getBonusService,
+      checkTitle: "GET Bonus Elettrodomestici Service",
+      successCounter: bonusElettrodomesticiServiceSuccess,
+      failureCounter: bonusElettrodomesticiServiceFailure,
+      durationTrend: bonusElettrodomesticiServiceDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    if (getBonusService.status !== 200){
-      console.log(`GET Bonus Elettrodomestici Service returns an error => statusCode=${getBonusService.status}, detail=${getBonusService.body}`)
-    }
-    bonusElettrodomesticiServiceDuration.add(getBonusService.timings.duration);
 
     // Retrieve Bonus Elettrodomestici service preferences
     // Estimated 29k req/h
@@ -114,13 +131,14 @@ export const loadingServicesAppTab = async (
         ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
       }
     );
-    [200, 401].includes(getBonusServicePreferences.status) ? bonusElettrodomesticiServicePreferencesSuccess.add(1) : bonusElettrodomesticiServicePreferencesFailure.add(1);
-    check(getBonusServicePreferences, {
-      "GET Bonus Elettrodomestici Service preferences returns 200": (r) => [200, 401].includes(r.status),
+    trackRequest({
+      response: getBonusServicePreferences,
+      checkTitle: "GET Bonus Elettrodomestici Service preferences",
+      successCounter: bonusElettrodomesticiServicePreferencesSuccess,
+      failureCounter: bonusElettrodomesticiServicePreferencesFailure,
+      durationTrend: bonusElettrodomesticiServicePreferencesDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
     });
-    if (getBonusServicePreferences.status !== 200){
-      console.log(`GET Bonus Elettrodomestici Service preferences returns an error => statusCode=${getBonusServicePreferences.status}, detail=${getBonusServicePreferences.body}`)
-    }
-    bonusElettrodomesticiServicePreferencesDuration.add(getBonusServicePreferences.timings.duration);
   }
 }

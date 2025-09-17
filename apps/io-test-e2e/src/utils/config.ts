@@ -9,6 +9,7 @@ import { IntegerFromString } from "@pagopa/ts-commons/lib/numbers";
 import { BooleanFromString } from "io-ts-types";
 
 export const FeatureScenarioType = t.union([
+  t.literal("APP_OPENING"),
   t.literal("TRIAL"),
   t.literal("MESSAGE_DETAIL"),
   t.literal("WALLET"),

@@ -5,6 +5,7 @@ import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 import { Counter, Trend } from "k6/metrics";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 const featuredServicesDuration = new Trend("get_featured_services");
 const featuredServicesSuccess = new Counter("get_featured_services_success");
@@ -48,16 +49,16 @@ const bonusElettrodomesticiServiceFailure = new Counter(
  */
 export const loadingOnlyServicesAppTab = async (
   config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
-) => {
+  key: GeneratedKeypair,
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>
+)  => {
   console.debug(`executeServicesApis`);
   // Get featured services
   // Peak 29k req/h
   const futuredServices = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v2/services/featured`,
     {
-      ...(await getK6DefaultHttpParams(thumbprint, tokenChecker)),
+      ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
   );
   trackRequest({
@@ -75,7 +76,7 @@ export const loadingOnlyServicesAppTab = async (
   const futuredInstitutions = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`,
     {
-      ...(await getK6DefaultHttpParams(thumbprint, tokenChecker)),
+      ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
   );
   trackRequest({
@@ -93,7 +94,7 @@ export const loadingOnlyServicesAppTab = async (
   const institutionsFirstPage = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`,
     {
-      ...(await getK6DefaultHttpParams(thumbprint, tokenChecker)),
+      ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
   );
   trackRequest({
@@ -113,7 +114,7 @@ export const loadingOnlyServicesAppTab = async (
     const institutionsSecondPage = http.get(
       `${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`,
       {
-        ...(await getK6DefaultHttpParams(thumbprint, tokenChecker)),
+        ...(await getK6DefaultHttpParams(key, tokenChecker)),
       }
     );
     trackRequest({
@@ -132,7 +133,7 @@ export const loadingOnlyServicesAppTab = async (
   const getBonusService = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
     {
-      ...(await getK6DefaultHttpParams(thumbprint, tokenChecker)),
+      ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
   );
   trackRequest({

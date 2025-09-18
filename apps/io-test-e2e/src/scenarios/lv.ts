@@ -12,19 +12,30 @@ import { errorsToReadableMessages, readableReportSimplified } from "@pagopa/ts-c
 import { SignerResponseBody } from "../types/signer";
 import { AccessToken } from "../generated/definitions/login/AccessToken";
 import { IConfig } from "../utils/config";
-import { Trend } from "k6/metrics";
+import { Counter, Trend } from "k6/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import { trackRequest } from "../utils/metrics";
+import { Client } from "k6/experimental/redis";
+import { delKey, setKey } from "../utils/token";
 
 const generateNonceDuration = new Trend("generate_nonce_duration");
-const refreshFastLoginDuration = new Trend("fast_login_duration");
-const refreshFastLoginWaiting = new Trend("fast_login_waiting");
-const scenarioDuration = new Trend("scenario_duration");
+const generateNonceSuccess = new Counter("generate_nonce_success");
+const generateNonceFailure = new Counter("generate_nonce_failure");
 
-export const lvScenario = (
+const refreshFastLoginDuration = new Trend("fast_login_duration");
+const refreshFastLoginSuccess = new Counter("fast_login_success");
+const refreshFastLoginFailure = new Counter("fast_login_failure");
+
+const refreshFastLoginWaiting = new Trend("fast_login_waiting");
+const scenarioDuration = new Trend("lv_scenario_duration");
+
+
+export const lvScenario = async (
   config: IConfig,
+  REDIS_CLIENT: Client,
   key: GeneratedKeypair
-): NonEmptyString => {
+): Promise<NonEmptyString> => {
 
   let duration = 0;
   // Generate Nonce
@@ -35,10 +46,14 @@ export const lvScenario = (
       responseType: "text",
     }
   );
-  check(generateNonceResponse, {
-    "GET Nonce returns 200": (r) => r.status === 200,
+  trackRequest({
+    response: generateNonceResponse,
+    checkTitle: "GET Nonce",
+    successCounter: generateNonceSuccess,
+    failureCounter: generateNonceFailure,
+    durationTrend: generateNonceDuration,
+    successStatuses: [200]
   });
-  generateNonceDuration.add(generateNonceResponse.timings.duration);
   duration += generateNonceResponse.timings.duration;
   const nonce = pipe(
     generateNonceResponse.json(),
@@ -79,6 +94,8 @@ export const lvScenario = (
     })
   );
 
+  await delKey(REDIS_CLIENT, key.thumbprint)();
+
   // Refresh the session using Lollipop signature
   const refreshSession = http.post(
     `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login`,
@@ -94,10 +111,14 @@ export const lvScenario = (
       responseType: "text",
     }
   );
-  check(refreshSession, {
-    "POST Fast Login returns 200": (r) => r.status === 200,
+  trackRequest({
+    response: refreshSession,
+    checkTitle: "POST Fast Login",
+    successCounter: refreshFastLoginSuccess,
+    failureCounter: refreshFastLoginFailure,
+    durationTrend: refreshFastLoginDuration,
+    successStatuses: [200]
   });
-  refreshFastLoginDuration.add(refreshSession.timings.duration);
   refreshFastLoginWaiting.add(refreshSession.timings.waiting);
   duration += refreshSession.timings.duration;
   const token = pipe(
@@ -111,6 +132,7 @@ export const lvScenario = (
       fail(readableReportSimplified(_));
     })
   );
+  await setKey(REDIS_CLIENT, key.thumbprint, token)();
   scenarioDuration.add(duration);
   return token;
 };

@@ -6,14 +6,15 @@ import { check } from "k6";
 import { Trend } from "k6/metrics";
 import http from "k6/http";
 import { IConfig } from "../utils/config";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 const createSubscriptionDuration = new Trend("post_subscription_duration");
 const getSubscriptionDuration = new Trend("get_subscription_duration");
 
 export const trialSubscription = async (
   config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
+  key: GeneratedKeypair,
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>
 ) => {
   // Create a trial subscription
   const createSubscription = http.post(
@@ -22,7 +23,7 @@ export const trialSubscription = async (
     {
       headers: {
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        Authorization: `Bearer ${await tokenChecker(key)}`,
         "Content-Type": "application/json",
       },
       responseType: "text",
@@ -39,7 +40,7 @@ export const trialSubscription = async (
     `${config.IO_BACKEND_BASE_URL}/api/v1/trials/trialId/subscriptions`,
     {
       headers: {
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        Authorization: `Bearer ${await tokenChecker(key)}`,
         "Content-Type": "application/json",
       },
       responseType: "text",

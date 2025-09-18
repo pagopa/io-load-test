@@ -65,6 +65,7 @@ export const IConfig = t.intersection([
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
     REDIS_CONN_STRING: NonEmptyString,
+    ENABLE_LV_SCENERY: t.boolean,
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -91,6 +92,11 @@ export const getConfigOrThrow = (
       ),
       FIXTURES_ENABLED: pipe(
         env.FIXTURES_ENABLED,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+      ENABLE_LV_SCENERY: pipe(
+        env.ENABLE_LV_SCENERY,
         BooleanFromString.decode,
         E.getOrElse(() => false)
       ),

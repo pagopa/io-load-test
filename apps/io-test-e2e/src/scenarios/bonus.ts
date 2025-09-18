@@ -5,6 +5,7 @@ import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 import { Counter, Trend } from "k6/metrics";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 const featuredServicesDuration = new Trend("get_featured_services");
 const featuredServicesSuccess = new Counter("get_featured_services_success");
@@ -34,8 +35,8 @@ const bonusElettrodomesticiServicePreferencesFailure = new Counter("get_bonus_el
  */
 export const loadingServicesAppTab = async (
   config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
+  key: GeneratedKeypair,
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>
 ) => {
   const executeServicesApis = randomIntBetween(1, 100) < 41;
   if (executeServicesApis) {
@@ -43,7 +44,7 @@ export const loadingServicesAppTab = async (
     // Get featured services
     // Peak 29k req/h
     const futuredServices = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/services/featured`, {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     }
     );
     trackRequest({
@@ -60,7 +61,7 @@ export const loadingServicesAppTab = async (
     // Get featured institutions
     // Peak 29k req/h
     const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`, {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
       response: futuredInstitutions,
@@ -75,7 +76,7 @@ export const loadingServicesAppTab = async (
     // List institutions page 1
     // Peak 29k req/h
     const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`, {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
       response: institutionsFirstPage,
@@ -92,7 +93,7 @@ export const loadingServicesAppTab = async (
     const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
     if (executeIstitutionsSecondPage) {
       const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`, {
-        ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+        ...await getK6DefaultHttpParams(key, tokenChecker)
       });
       trackRequest({
         response: institutionsSecondPage,
@@ -110,7 +111,7 @@ export const loadingServicesAppTab = async (
     const getBonusService = http.get(
       `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
       {
-        ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+        ...await getK6DefaultHttpParams(key, tokenChecker)
       }
     );
     trackRequest({
@@ -128,7 +129,7 @@ export const loadingServicesAppTab = async (
     const getBonusServicePreferences = http.get(
       `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
       {
-        ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+        ...await getK6DefaultHttpParams(key, tokenChecker)
       }
     );
     trackRequest({

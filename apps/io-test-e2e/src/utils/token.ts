@@ -6,6 +6,8 @@ import * as TE from "fp-ts/lib/TaskEither";
 import * as J from "fp-ts/Json";
 import * as E from "fp-ts/Either";
 import * as O from "fp-ts/Option";
+import { IConfig } from "./config";
+import { lvScenario } from "../scenarios/lv";
 
 export const
   checkAndGetToken = (redisClient: redis.Client) => async (
@@ -22,6 +24,23 @@ export const
   }
   return token;
 };
+
+export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig,) => async (
+  key: GeneratedKeypair
+): Promise<string> => {
+  let token = await pipe(
+    TE.tryCatch(() => redisClient.get(key.thumbprint), E.toError),
+    TE.chainW(TE.fromPredicate((token) => token !== "", () => null)),
+    TE.swap,
+    TE.chainW(() => TE.tryCatch(() => lvScenario(config, redisClient, key), E.toError)),
+    TE.toUnion
+  )();
+  if (token === "" || token instanceof Error ) {
+    sleep(0.5);
+    return await getSessionTokenOrRefresh(redisClient, config)(key);
+  }
+  return token;
+}
 
 export const keysInitializer = (redisClient: redis.Client) => (
   key: string,
@@ -105,7 +124,7 @@ export const setKey = (
   value: string
 ): TE.TaskEither<Error, string> =>
   TE.tryCatch(
-    () => redisClient.set(key, value, 0),
+    () => redisClient.set(key, value, 600),
     (err) =>
       Error(
         `Error while set on redis, method=setKey |DETAIL=${JSON.stringify(err)}`

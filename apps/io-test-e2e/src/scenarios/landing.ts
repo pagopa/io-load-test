@@ -10,6 +10,7 @@ import http from "k6/http";
 import { IConfig } from "../utils/config";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 const pingDuration = new Trend("get_ping_duration");
 const pingFailure = new Counter("get_ping_failure");
@@ -38,8 +39,8 @@ const messagesSuccess = new Counter("get_opening_messages_success");
 
 export const appOpening = async (
   config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
+  key: GeneratedKeypair,
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>
 ) => {
   // Check if App is online
   // Peak 650k req/h
@@ -58,7 +59,7 @@ export const appOpening = async (
   const getSession = http.get(
     `${config.AUTH_BACKEND_BASE_URL}/api/v1/session`,
     {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     }
   );
   trackRequest({
@@ -75,7 +76,7 @@ export const appOpening = async (
     const getSession2 = http.get(
       `${config.AUTH_BACKEND_BASE_URL}/api/v1/session`,
       {
-        ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+        ...await getK6DefaultHttpParams(key, tokenChecker)
       }
     );
     trackRequest({
@@ -92,7 +93,7 @@ export const appOpening = async (
   // Retrieve the profile using the new token
   // Peak 70k req/h
   const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`, {
-    ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+    ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
     response: getProfile,
@@ -110,7 +111,7 @@ export const appOpening = async (
   if (profile.service_preferences_settings && profile.service_preferences_settings.mode == "LEGACY") {
     console.error(`Legacy mode detected for `, profile.fiscal_code);
     const upsertProfile = http.post(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`,JSON.stringify({...profile, service_preferences_settings: {mode: "AUTO"}}), {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     check(upsertProfile, {
       "POST Update Profile": (r) => [200, 401].includes(r.status),
@@ -123,7 +124,7 @@ export const appOpening = async (
   if (executeUserDataProcessing) {
     console.debug(`executeUserDataProcessing`);
     const deleteUserDataProcessing = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/user-data-processing/DELETE`, {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
       response: deleteUserDataProcessing,
@@ -140,7 +141,7 @@ export const appOpening = async (
   //check if fiscalCode is whitelisted for IT Wallet
   // Peak 55k req/h
   const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/whitelisted-fiscal-code`, {
-    ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+    ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
     response: isFiscalCodeWhitelisted,
@@ -155,7 +156,7 @@ export const appOpening = async (
   //check wallet instance status
   // Peak 55k req/h
   const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/wallet-instances/current/status`, {
-    ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+    ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
     response: getWalletInstanceStatus,
@@ -172,7 +173,7 @@ export const appOpening = async (
   const getSendActivationStatus = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
     {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     }
   );
   trackRequest({
@@ -190,7 +191,7 @@ export const appOpening = async (
   const getMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/messages?enrich_result_data=true&page_size=12&archived=false`,
     {
-      ...await getK6DefaultHttpParams(thumbprint, tokenChecker)
+      ...await getK6DefaultHttpParams(key, tokenChecker)
     }
   );
   trackRequest({

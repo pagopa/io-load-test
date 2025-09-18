@@ -13,13 +13,13 @@ import { getFeatureScenario } from "./scenarios/mapping";
 import { getRedisClient } from "./utils/redis";
 import {
   checkAndGetToken,
-  delKey,
+  getSessionTokenOrRefresh,
   keysInitializer,
   popListKeyAsJson,
   pushListKey,
-  setKey,
 } from "./utils/token";
 import { SharedArray } from "k6/data";
+import { identity } from "fp-ts/lib/function";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
@@ -62,6 +62,7 @@ export const options = {
 const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 
 export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
+export const newTokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);
 const queueInitializer = keysInitializer(REDIS_CLIENT);
 
 export default async function() {
@@ -71,24 +72,16 @@ export default async function() {
     TE.map((generatedKeyPair) => generatedKeyPair as GeneratedKeypair),
     TE.chain((key) =>
       pipe(
-        delKey(REDIS_CLIENT, key.thumbprint),
-        TE.chain(() =>
-          pipe(
-            lvScenario(config, key),
-            TE.of,
-            TE.chain((token) =>
-              pipe(
-                setKey(REDIS_CLIENT, key.thumbprint, token),
-                TE.chain(() =>
-                  pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-                ),
-                TE.map(() => token)
-              )
-            ),
-            TE.orElseW(() =>
-              pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-            )
-          )
+        config.ENABLE_LV_SCENERY,
+        TE.fromPredicate(identity, () => false),
+        TE.chainW(() =>
+          TE.tryCatch(() => lvScenario(config, REDIS_CLIENT, key), () => new Error("Error executing lvScenario")),
+        ),
+        TE.chainW(() =>
+          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
+        ),
+        TE.orElseW(() =>
+          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
         ),
         TE.chain(() =>
           pipe(
@@ -101,7 +94,7 @@ export default async function() {
             (scenarios) =>
               scenarios.map((fn) =>
                 TE.tryCatch(
-                  () => fn(config, key.thumbprint, tokenChecker),
+                  async () => fn(config, key, newTokenChecker),
                   E.toError
                 )
               ),

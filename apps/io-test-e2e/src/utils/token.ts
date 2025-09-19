@@ -8,6 +8,8 @@ import * as E from "fp-ts/Either";
 import * as O from "fp-ts/Option";
 import { IConfig } from "./config";
 import { lvScenario } from "../scenarios/lv";
+// @ts-ignore
+import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 export const
   checkAndGetToken = (redisClient: redis.Client) => async (
@@ -25,7 +27,7 @@ export const
   return token;
 };
 
-export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig,) => async (
+export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig, counter: number = 0) => async (
   key: GeneratedKeypair
 ): Promise<string> => {
   let token = await pipe(
@@ -36,8 +38,11 @@ export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: ICon
     TE.toUnion
   )();
   if (token === "" || token instanceof Error ) {
-    sleep(0.5);
-    return await getSessionTokenOrRefresh(redisClient, config)(key);
+    // 20% jitter time
+    const jitter = 0.5 * counter * randomIntBetween(0, 101) / 100 * 0.2;
+    const waitTime = jitter + (0.5 * (counter + 1));
+    sleep(Math.min(waitTime, 10));
+    return await getSessionTokenOrRefresh(redisClient, config, counter + 1)(key);
   }
   return token;
 }

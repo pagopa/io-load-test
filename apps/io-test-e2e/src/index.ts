@@ -40,9 +40,9 @@ export const options = {
       startRate: 1,
 
       stages: [
-        //{target: 25, duration: "2m"},{target: 25, duration: "1m"},
-        //{target: 200, duration: "2m"}, {target: 200, duration: "3m"},
-        {target: 10, duration: "1m"}, {target: 10, duration: "1m"},
+        {target: 19, duration: "2m"},{target: 19, duration: "1m"},
+        {target: 100, duration: "2m"}, {target: 100, duration: "60m"},
+        //{target: 10, duration: "1m"}, {target: 10, duration: "1m"},
         //{target: 50, duration: "2m"}, {target: 50, duration: "3m"},
         //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
       ],

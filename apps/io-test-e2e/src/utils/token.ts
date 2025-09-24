@@ -11,13 +11,15 @@ import { lvScenario } from "../scenarios/lv";
 // @ts-ignore
 import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
-export const
-  checkAndGetToken = (redisClient: redis.Client) => async (
+export const checkAndGetToken = (redisClient: redis.Client) => async (
   thumbprint: string
 ) => {
   let token: string = "";
+  let counter = 0;
   while (token === "") {
-    sleep(0.5);
+    const jitter = 0.1 * counter * randomIntBetween(0, 101) / 100 * 0.2;
+    const waitTime = jitter + (0.1 * (counter + 1));
+    sleep(Math.min(waitTime, 3));
     try {
       token = await redisClient.get(thumbprint);
     } catch(err) {
@@ -30,6 +32,9 @@ export const
 export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig, counter: number = 0) => async (
   key: GeneratedKeypair
 ): Promise<string> => {
+  if (config.ENABLE_LV_SCENERY === true) {
+    return checkAndGetToken(redisClient)(key.thumbprint);
+  }
   let token = await pipe(
     TE.tryCatch(() => redisClient.get(key.thumbprint), E.toError),
     TE.chainW(TE.fromPredicate((token) => token !== "", () => null)),
@@ -39,9 +44,9 @@ export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: ICon
   )();
   if (token === "" || token instanceof Error ) {
     // 20% jitter time
-    const jitter = 0.5 * counter * randomIntBetween(0, 101) / 100 * 0.2;
-    const waitTime = jitter + (0.5 * (counter + 1));
-    sleep(Math.min(waitTime, 10));
+    const jitter = 0.1 * counter * randomIntBetween(0, 101) / 100 * 0.2;
+    const waitTime = jitter + (0.1 * (counter + 1));
+    sleep(Math.min(waitTime, 3));
     return await getSessionTokenOrRefresh(redisClient, config, counter + 1)(key);
   }
   return token;
@@ -122,6 +127,41 @@ export const getKeyAsType = (
         )}`
       )
   );
+
+export const acquireLockOrWait = async (
+  redisClient: redis.Client,
+  thumbprint: string
+): Promise<void> => {
+  try {
+    const lockKey = `${thumbprint}-look-key`;
+    let lock = await redisClient.sadd(lockKey, "LOCKED");
+    while (lock !== 1) {
+      sleep(0.1);
+      lock = await redisClient.sadd(lockKey, "LOCKED");
+    }
+    // Set an expiration to the lock key to avoid deadlock if
+    // lock release process fails
+    const expireLock = await redisClient.expire(lockKey, 10);
+    if (expireLock === false) {
+      console.error("Failed to set lock expiration");
+    }
+  } catch (error) {
+    console.error("An error occured during lock acquiring. Retring ...");
+    await acquireLockOrWait(redisClient, thumbprint);
+  }
+}
+
+export const releaseLock = async (
+  redisClient: redis.Client,
+  thumbprint: string
+): Promise<void> => {
+  try {
+    const lockKey = `${thumbprint}-look-key`;
+    await redisClient.srem(lockKey, "LOCKED");
+  } catch (error) {
+    console.error("An error occured during lock releasing. Skipping ...");
+  }
+}
 
 export const setKey = (
   redisClient: redis.Client,

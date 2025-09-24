@@ -17,7 +17,7 @@ import { GeneratedKeypair } from "../utils/lollipop";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { trackRequest } from "../utils/metrics";
 import { Client } from "k6/experimental/redis";
-import { delKey, setKey } from "../utils/token";
+import { acquireLockOrWait, delKey, releaseLock, setKey } from "../utils/token";
 
 const generateNonceDuration = new Trend("generate_nonce_duration");
 const generateNonceSuccess = new Counter("generate_nonce_success");
@@ -94,6 +94,7 @@ export const lvScenario = async (
     })
   );
 
+  await acquireLockOrWait(REDIS_CLIENT, key.thumbprint);
   await delKey(REDIS_CLIENT, key.thumbprint)();
 
   // Refresh the session using Lollipop signature
@@ -121,18 +122,23 @@ export const lvScenario = async (
   });
   refreshFastLoginWaiting.add(refreshSession.timings.waiting);
   duration += refreshSession.timings.duration;
-  const token = pipe(
+  const errorOrToken = pipe(
     refreshSession.json(),
     AccessToken.decode,
     E.map((_) => _.token),
-    E.getOrElseW((_) => {
+    E.mapLeft((_) => {
       console.error(`refreshResponse => ${refreshSession.status}`)
       console.error(`FiscalCode => ${key.fiscalCode} | Thumbprint => ${key.thumbprint}`)
       console.error(`Error decoding the refresh session response|DETAIL=${errorsToReadableMessages(_).join("|")}`);
-      fail(readableReportSimplified(_));
+      return new Error(readableReportSimplified(_));
     })
   );
-  await setKey(REDIS_CLIENT, key.thumbprint, token)();
+  if(E.isLeft(errorOrToken)) {
+    await releaseLock(REDIS_CLIENT, key.thumbprint);
+    fail(errorOrToken.left.message);
+  }
+  await setKey(REDIS_CLIENT, key.thumbprint, errorOrToken.right)();
+  await releaseLock(REDIS_CLIENT, key.thumbprint);
   scenarioDuration.add(duration);
-  return token;
+  return errorOrToken.right;
 };

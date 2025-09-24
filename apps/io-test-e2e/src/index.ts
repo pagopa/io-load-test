@@ -12,7 +12,6 @@ import * as AR from "fp-ts/Array";
 import { getFeatureScenario } from "./scenarios/mapping";
 import { getRedisClient } from "./utils/redis";
 import {
-  checkAndGetToken,
   getSessionTokenOrRefresh,
   keysInitializer,
   popListKeyAsJson,
@@ -40,8 +39,8 @@ export const options = {
       startRate: 1,
 
       stages: [
-        {target: 19, duration: "2m"},{target: 19, duration: "1m"},
-        {target: 100, duration: "2m"}, {target: 100, duration: "60m"},
+        {target: 20, duration: "2m"},{target: 20, duration: "1m"},
+        {target: 300, duration: "2m"}, {target: 300, duration: "5m"},
         //{target: 10, duration: "1m"}, {target: 10, duration: "1m"},
         //{target: 50, duration: "2m"}, {target: 50, duration: "3m"},
         //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
@@ -61,7 +60,6 @@ export const options = {
 
 const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 
-export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
 export const newTokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);
 const queueInitializer = keysInitializer(REDIS_CLIENT);
 

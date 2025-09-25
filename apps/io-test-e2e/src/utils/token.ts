@@ -17,9 +17,11 @@ export const checkAndGetToken = (redisClient: redis.Client) => async (
   let token: string = "";
   let counter = 0;
   while (token === "") {
+    // 20% jitter time
     const jitter = 0.1 * counter * randomIntBetween(0, 101) / 100 * 0.2;
     const waitTime = jitter + (0.1 * (counter + 1));
     sleep(Math.min(waitTime, 3));
+    counter += 1;
     try {
       token = await redisClient.get(thumbprint);
     } catch(err) {

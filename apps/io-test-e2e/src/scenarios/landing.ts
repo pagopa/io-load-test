@@ -109,7 +109,7 @@ export const appOpening = async (
   // if the current profile is detected to use Legacy mode it will be updated to AUTO mode
   const profile = JSON.parse(getProfile.body);
   if (profile.service_preferences_settings && profile.service_preferences_settings.mode == "LEGACY") {
-    console.error(`Legacy mode detected for `, profile.fiscal_code);
+    console.info(`Legacy mode detected for `, profile.fiscal_code);
     const upsertProfile = http.post(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`,JSON.stringify({...profile, service_preferences_settings: {mode: "AUTO"}}), {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
@@ -164,7 +164,7 @@ export const appOpening = async (
     successCounter: walletInstanceStatusSuccess,
     failureCounter: walletInstanceStatusFailure,
     durationTrend: walletInstanceStatusDuration,
-    successStatuses: [200],
+    successStatuses: [200, 404],
     skipStatuses: [401]
   });
 

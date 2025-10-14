@@ -14,23 +14,6 @@ dump.rdb
 *.Cache
 project.lock.json
 
-/packages
-/TestResults
-
-/tools/NuGet.exe
-/App_Data
-/secrets
-/data
-.secrets
-appsettings.json
-local.settings.json
-
-node_modules
-dist
-out
-
-azure-functions-core-tools
-
 # Local python packages
 .python_packages/
 
@@ -47,17 +30,3 @@ venv.bak/
 __pycache__/
 *.py[cod]
 *$py.class
-
-coverage
-
-yarn-error.log
-src/generated/**/*
-
-# eslint section
-!.eslintrc.js
-.eslintcache
-
-
-# integration tests
-docker-compose.override.yml
-__integrations__/environments/generated/**

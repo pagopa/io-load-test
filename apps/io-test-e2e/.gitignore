@@ -6,6 +6,7 @@ edge
 Publish
 
 .DS_Store
+dump.rdb
 
 *.user
 *.suo

@@ -147,19 +147,22 @@ const fixturesHandler = pipe(
                 TE.chain(({ existingProfileVersion, sessionToken }) =>
                   pipe(
                     existingProfileVersion,
-                    O.fromPredicate((p) => p.is_inbox_enabled),
+                    // enable inbox only if not already enabled
+                    O.fromPredicate((p) => !p.is_inbox_enabled),
                     O.map((dbProfile) =>
                       pipe(
                         TE.tryCatch(
-                          () =>
-                            backendIOClient.updateProfile({
+                          () => {
+                            console.log(`Enabling inbox for ${fiscalCode} ...`);
+                            return backendIOClient.updateProfile({
                               Bearer: `Bearer ${sessionToken}`,
                               body: {
                                 accepted_tos_version: 4.8,
                                 is_inbox_enabled: true,
                                 version: dbProfile.version,
                               },
-                            }),
+                            })
+                          },
                           E.toError
                         ),
                         updateTe => TE.tryCatch(() => retriableTaskEither(5, 1000)(updateTe), E.toError),

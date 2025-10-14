@@ -147,6 +147,7 @@ const fixturesHandler = pipe(
                 TE.chain(({ existingProfileVersion, sessionToken }) =>
                   pipe(
                     existingProfileVersion,
+                    // enable inbox only if not already enabled
                     O.fromPredicate((p) => !p.is_inbox_enabled),
                     O.map((dbProfile) =>
                       pipe(

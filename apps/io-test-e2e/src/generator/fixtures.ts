@@ -21,6 +21,7 @@ import { NewMessage } from "../generated/definitions/services/NewMessage";
 import { faker as F } from "@faker-js/faker";
 import { CreatedMessage } from "../generated/definitions/services/CreatedMessage";
 import { InitializedProfile } from "../generated/definitions/backend/InitializedProfile";
+import { ServicesPreferencesModeEnum } from "../generated/definitions/backend/ServicesPreferencesMode";
 
 const generateTestMessage = (
   fiscalCode: FiscalCode,
@@ -159,6 +160,9 @@ const fixturesHandler = pipe(
                               body: {
                                 accepted_tos_version: 4.8,
                                 is_inbox_enabled: true,
+                                service_preferences_settings: {
+                                  mode: ServicesPreferencesModeEnum.AUTO
+                                },
                                 version: dbProfile.version,
                               },
                             })

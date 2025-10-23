@@ -11,6 +11,13 @@ import { IConfig } from "../utils/config";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
+import { Client } from "k6/experimental/redis";
+import { setKey } from "../utils/token";
+import { flow, pipe } from "fp-ts/lib/function";
+import { PublicSession } from "../generated/definitions/session-manager/PublicSession";
+import * as E from "fp-ts/Either";
+import * as TE from "fp-ts/TaskEither";
+import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 
 const pingDuration = new Trend("get_ping_duration");
 const pingFailure = new Counter("get_ping_failure");
@@ -37,11 +44,17 @@ const messagesDuration = new Trend("get_opening_messages_duration");
 const messagesFailure = new Counter("get_opening_messages_failure");
 const messagesSuccess = new Counter("get_opening_messages_success");
 
-export const appOpening = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
+export const appOpening = async ({
+  config,
+  key,
+  REDIS_CLIENT,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  REDIS_CLIENT: Client;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Check if App is online
   // Peak 650k req/h
   const isOnline = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/ping`);
@@ -71,6 +84,26 @@ export const appOpening = async (
     successStatuses: [200],
     skipStatuses: [401]
   });
+  // Store BPD token in Redis to use it in other scenarios
+  await pipe(
+    E.tryCatch(() =>
+      JSON.parse(getSession.body),
+      E.toError
+    ),
+    E.chain(
+      flow(
+        PublicSession.decode,
+        E.mapLeft((err) => {
+          return new Error(readableReportSimplified(err));
+        })
+      )
+    ),
+    TE.fromEither,
+    TE.chain((session) => setKey(REDIS_CLIENT, `${key.thumbprint}-bpd-token`, session.bpdToken || "")),
+  )().catch((e) => {
+    console.error(`Error storing BPD token for key ${key.thumbprint}|DETAIL => ${e.message}`);
+  });
+  // Occasionally execute a second get session to simulate multiple app tabs
   const executeSecondGetSession = randomIntBetween(1, 10) < 6;
   if(executeSecondGetSession){
     const getSession2 = http.get(

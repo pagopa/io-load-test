@@ -17,10 +17,13 @@ export const checkAndGetToken = (redisClient: redis.Client) => async (
   let token: string = "";
   let counter = 0;
   while (token === "") {
+    if(counter > 10) {
+      throw new Error(`Unable to get session token for thumbprint ${thumbprint} after ${counter} retries`);
+    }
     // 20% jitter time
     const jitter = 0.1 * counter * randomIntBetween(0, 101) / 100 * 0.2;
-    const waitTime = jitter + (0.1 * (counter + 1));
-    sleep(Math.min(waitTime, 3));
+    const waitTime = jitter + (0.2 * (counter + 1));
+    sleep(Math.min(waitTime, 1));
     counter += 1;
     try {
       token = await redisClient.get(thumbprint);
@@ -34,6 +37,9 @@ export const checkAndGetToken = (redisClient: redis.Client) => async (
 export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig, counter: number = 0) => async (
   key: GeneratedKeypair
 ): Promise<string> => {
+  if(counter > 20) {
+    throw new Error(`Unable to get session token for thumbprint ${key.thumbprint} after ${counter} retries`);
+  }
   if (config.ENABLE_LV_SCENERY === true) {
     return checkAndGetToken(redisClient)(key.thumbprint);
   }
@@ -46,8 +52,8 @@ export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: ICon
   )();
   if (token === "" || token instanceof Error ) {
     // 20% jitter time
-    const jitter = 0.1 * counter * randomIntBetween(0, 101) / 100 * 0.2;
-    const waitTime = jitter + (0.1 * (counter + 1));
+    const jitter = 0.2 * counter * randomIntBetween(0, 101) / 100 * 0.2;
+    const waitTime = jitter + (0.2 * (counter + 1));
     sleep(Math.min(waitTime, 3));
     return await getSessionTokenOrRefresh(redisClient, config, counter + 1)(key);
   }

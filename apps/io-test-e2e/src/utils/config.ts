@@ -66,6 +66,7 @@ export const IConfig = t.intersection([
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
     REDIS_CONN_STRING: NonEmptyString,
     ENABLE_LV_SCENERY: t.boolean,
+    ENABLE_SSO_INTROSPECTION: t.boolean,
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -97,6 +98,11 @@ export const getConfigOrThrow = (
       ),
       ENABLE_LV_SCENERY: pipe(
         env.ENABLE_LV_SCENERY,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+      ENABLE_SSO_INTROSPECTION: pipe(
+        env.ENABLE_SSO_INTROSPECTION,
         BooleanFromString.decode,
         E.getOrElse(() => false)
       ),

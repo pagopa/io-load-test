@@ -43,8 +43,12 @@ export const lvScenario = async (
     `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login/nonce/generate`,
     undefined,
     {
+      headers: {
+        "Content-Type": "application/json",
+      },
       responseType: "text",
-    }
+      timeout: "12s",
+    },
   );
   trackRequest({
     response: generateNonceResponse,
@@ -79,6 +83,7 @@ export const lvScenario = async (
         "Content-Type": "application/json",
       },
       responseType: "text",
+      timeout: "5s",
     }
   );
   check(signerResponse, {
@@ -110,6 +115,7 @@ export const lvScenario = async (
         "Content-Type": "application/json",
       },
       responseType: "text",
+      timeout: "12s",
     }
   );
   trackRequest({

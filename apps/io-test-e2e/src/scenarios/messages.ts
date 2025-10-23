@@ -17,11 +17,15 @@ import { GeneratedKeypair } from "../utils/lollipop";
 const messagesDuration = new Trend("get_messages_duration");
 const messageDetailDuration = new Trend("get_message_detail_duration");
 
-export const messageListAndDetail = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
+export const messageListAndDetail = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Retrieve users's messages
   const getFirstPageMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true`,

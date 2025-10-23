@@ -63,11 +63,15 @@ const getNonce = async (
 /* Function to handle wallet instance creation.
  * Warning: This work only with fiscal codes that starts with LVTEST00A00
  */
-export const walletInstanceCreation = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
+export const walletInstanceCreation = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Fetch nonce
   const nonce = await getNonce(config, key, tokenChecker);
 

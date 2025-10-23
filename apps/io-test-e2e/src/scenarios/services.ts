@@ -47,11 +47,15 @@ const bonusElettrodomesticiServiceFailure = new Counter(
 
 /* Function to handle user landing on the services section.
  */
-export const loadingOnlyServicesAppTab = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-)  => {
+export const loadingOnlyServicesAppTab = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   console.debug(`executeServicesApis`);
   // Get featured services
   // Peak 29k req/h

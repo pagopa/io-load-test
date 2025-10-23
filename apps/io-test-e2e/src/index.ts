@@ -92,7 +92,7 @@ export default async function() {
             (scenarios) =>
               scenarios.map((fn) =>
                 TE.tryCatch(
-                  async () => fn(config, key, newTokenChecker),
+                  async () => fn({ config, REDIS_CLIENT, key, tokenChecker:newTokenChecker }),
                   E.toError
                 )
               ),

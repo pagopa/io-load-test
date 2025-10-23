@@ -6,6 +6,8 @@ import { Counter, Trend } from "k6/metrics";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
+import { checkAndGetToken } from "../utils/token";
+import { Client } from "k6/experimental/redis";
 
 const featuredServicesDuration = new Trend("get_featured_services");
 const featuredServicesSuccess = new Counter("get_featured_services_success");
@@ -31,13 +33,23 @@ const bonusElettrodomesticiServicePreferencesDuration = new Trend("get_bonus_ele
 const bonusElettrodomesticiServicePreferencesSuccess = new Counter("get_bonus_elettrodomestici_service_preferences_success");
 const bonusElettrodomesticiServicePreferencesFailure = new Counter("get_bonus_elettrodomestici_service_preferences_failure");
 
+const bpdUserDuration = new Trend("get_bpd_user");
+const bpdUserSuccess = new Counter("get_bpd_user_success");
+const bpdUserFailure = new Counter("get_bpd_user_failure");
+
 /* Function to handle user landing on the services section.
  */
-export const loadingServicesAppTab = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
+export const loadingServicesAppTab = async ({
+  config,
+  key,
+  REDIS_CLIENT,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  REDIS_CLIENT: Client;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   const executeServicesApis = randomIntBetween(1, 100) < 41;
   if (executeServicesApis) {
     console.debug(`executeServicesApis`);
@@ -141,5 +153,30 @@ export const loadingServicesAppTab = async (
       successStatuses: [200],
       skipStatuses: [401]
     });
+
+    if(config.ENABLE_SSO_INTROSPECTION) {
+      // Simulate SSO introspection call
+      // Peak 29k req/h
+      const getBPDUser = http.get(
+        `${config.AUTH_BACKEND_BASE_URL}/api/sso/bpd/v1/user`,
+        {
+          headers: {
+            Authorization: `Bearer ${await checkAndGetToken(REDIS_CLIENT)(`${key.thumbprint}-bpd-token`)}`,
+            "Content-Type": "application/json",
+          },
+          timeout: "12s",
+          responseType: "text",
+        }
+      );
+      trackRequest({
+        response: getBPDUser,
+        checkTitle: "GET BPD User",
+        successCounter: bpdUserSuccess,
+        failureCounter: bpdUserFailure,
+        durationTrend: bpdUserDuration,
+        successStatuses: [200],
+        skipStatuses: [401]
+      });
+    }
   }
 }

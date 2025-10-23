@@ -11,11 +11,15 @@ import { GeneratedKeypair } from "../utils/lollipop";
 const createSubscriptionDuration = new Trend("post_subscription_duration");
 const getSubscriptionDuration = new Trend("get_subscription_duration");
 
-export const trialSubscription = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
+export const trialSubscription = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Create a trial subscription
   const createSubscription = http.post(
     `${config.IO_BACKEND_BASE_URL}/api/v1/trials/trialId/subscriptions`,

@@ -35,6 +35,9 @@ Is possible disable the LV scenario generating valid session token only once int
 The stability of the tool during load test execution is granted when the response of the backend services is almost stable and the number of the max VU is less than the double of the available Fiscal Code declared in `TEST_FISCAL_CODE` ENV var.
 For example if there are `500` CF available for the test we can use `800` max VU.
 
+## Bonus scenario
+The bonus scenario will use an introspection API for SSO token. To perform this API without a `401 Unouthorized` is needed to add the `k6` client to the IP Whitelist on the Session Manager. This API can be enabled using the `ENABLE_SSO_INTROSPECTION` ENV variable.
+
 ## Load test diagrams
 High level load test flow chart:
 ![High level load test flow chart](docs/high-level-diagram.svg)

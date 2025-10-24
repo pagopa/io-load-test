@@ -97,10 +97,11 @@ export const lvScenario = async (
       console.error("Error decoding signer response body");
       fail(readableReportSimplified(_));
     })
-  );
+  )
 
   await acquireLockOrWait(REDIS_CLIENT, key.thumbprint);
   await delKey(REDIS_CLIENT, key.thumbprint)();
+  await delKey(REDIS_CLIENT, `${key.thumbprint}-bpd-token`)();
 
   // Refresh the session using Lollipop signature
   const refreshSession = http.post(

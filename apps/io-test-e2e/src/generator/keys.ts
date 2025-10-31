@@ -10,15 +10,24 @@ import { FiscalCode } from "@pagopa/ts-commons/lib/strings";
 const config = getConfigOrThrow(process.env);
 
 const generateTestData = () => {
+  const chunkSize = 20;
   return pipe(
     config.TEST_FISCAL_CODE as ReadonlyArray<FiscalCode>,
-    ROA.map((fiscalCode) =>
-      pipe(TE.tryCatch(() => initNewLollipopKey(config)(fiscalCode), E.toError))
+    ROA.chunksOf(chunkSize),
+    ROA.map(chunk =>
+      pipe(
+        chunk,
+        ROA.map(fiscalCode =>
+          pipe(TE.tryCatch(() => initNewLollipopKey(config)(fiscalCode), E.toError))
+        ),
+        ROA.sequence(T.ApplicativePar), // parallel execution within the chunk
+        T.map(ROA.rights)
+      )
     ),
-    ROA.sequence(T.ApplicativeSeq),
-    T.map(ROA.rights),
-    T.map((_) => {
-      console.log(JSON.stringify(_.map((r) => r.keyPair)));
+    ROA.sequence(T.ApplicativeSeq), // sequential execution of chunks
+    T.map(chunks => chunks.flat()),
+    T.map(results => {
+      console.log(JSON.stringify(results.map(r => r.keyPair)));
     })
   )();
 };

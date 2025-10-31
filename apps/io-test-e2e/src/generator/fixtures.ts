@@ -263,7 +263,7 @@ const fixturesHandler = pipe(
                   TE.chain((res) => TE.fromTask(T.delay(500)(T.of(res))))
                 )
               ),
-            AR.sequence(TE.ApplicativeSeq),
+            AR.sequence(TE.ApplicativePar),
             logTaskEither(`Test messages sent for ${fiscalCode}`),
             TE.map((responses) => responses.length === 10)
           )

@@ -151,18 +151,6 @@ export const appOpening = async ({
     });
   }
 
-  // UpsertProfile to simulate email channel activation
-  const executeUpsertProfile = randomIntBetween(1, 100) < 30;
-  if (executeUpsertProfile) {
-    console.debug(`Upserting profile `, profile.fiscal_code);
-    const upsertProfile = http.post(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`,JSON.stringify({...profile, is_email_enabled: true}), {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    });
-    check(upsertProfile, {
-      "POST Update Profile": (r) => [200, 401].includes(r.status),
-    });
-  }
-
   // Check if a delete profile operation is in progress
   // Peak 2.8k req/h
   const executeUserDataProcessing = randomIntBetween(1, 27) == 1;
@@ -215,26 +203,21 @@ export const appOpening = async ({
 
   // Retrieve SEND activation status
   // Peak 56k req/h
-  // Temporary reduced for cosmos limitation
-  const executeGetSendActivationStatus = randomIntBetween(1, 100) < 40;
-  if (executeGetSendActivationStatus) {
-    console.debug(`executeGetSendActivationStatus`);
-    const getSendActivationStatus = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
-      {
-        ...await getK6DefaultHttpParams(key, tokenChecker)
-      }
-    );
-    trackRequest({
-      response: getSendActivationStatus,
-      checkTitle: "GET SEND activation status",
-      successCounter: sendActivationStatusSuccess,
-      failureCounter: sendActivationStatusFailure,
-      durationTrend: sendActivationStatusDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-  }
+  const getSendActivationStatus = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
+    {
+      ...await getK6DefaultHttpParams(key, tokenChecker)
+    }
+  );
+  trackRequest({
+    response: getSendActivationStatus,
+    checkTitle: "GET SEND activation status",
+    successCounter: sendActivationStatusSuccess,
+    failureCounter: sendActivationStatusFailure,
+    durationTrend: sendActivationStatusDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
 
   // Retrieve users's messages
   // Peak 56k req/h

@@ -121,7 +121,7 @@ export const loadingServicesAppTab = async ({
     // Retrieve Bonus Elettrodomestici service
     // Estimated 29k req/h
     const getBonusService = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
+      `${config.IO_BACKEND_BASE_URL}/api/v2/services/01K8BG9QEVTHY17EDS79Z3FB29`,
       {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       }
@@ -139,7 +139,7 @@ export const loadingServicesAppTab = async ({
     // Retrieve Bonus Elettrodomestici service preferences
     // Estimated 29k req/h
     const getBonusServicePreferences = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01JSEAMB13Y8EE487F95F64H9W/preferences`,
+      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01K8BG9QEVTHY17EDS79Z3FB29/preferences`,
       {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       }

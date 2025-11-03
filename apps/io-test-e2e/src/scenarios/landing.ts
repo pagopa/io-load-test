@@ -203,21 +203,26 @@ export const appOpening = async ({
 
   // Retrieve SEND activation status
   // Peak 56k req/h
-  const getSendActivationStatus = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
-    {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    }
-  );
-  trackRequest({
-    response: getSendActivationStatus,
-    checkTitle: "GET SEND activation status",
-    successCounter: sendActivationStatusSuccess,
-    failureCounter: sendActivationStatusFailure,
-    durationTrend: sendActivationStatusDuration,
-    successStatuses: [200],
-    skipStatuses: [401]
-  });
+  // Temporary reduced for cosmos limitation
+  const executeGetSendActivationStatus = randomIntBetween(1, 100) < 50;
+  if (executeGetSendActivationStatus) {
+    console.debug(`executeGetSendActivationStatus`);
+    const getSendActivationStatus = http.get(
+      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
+      {
+        ...await getK6DefaultHttpParams(key, tokenChecker)
+      }
+    );
+    trackRequest({
+      response: getSendActivationStatus,
+      checkTitle: "GET SEND activation status",
+      successCounter: sendActivationStatusSuccess,
+      failureCounter: sendActivationStatusFailure,
+      durationTrend: sendActivationStatusDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
+    });
+  }
 
   // Retrieve users's messages
   // Peak 56k req/h

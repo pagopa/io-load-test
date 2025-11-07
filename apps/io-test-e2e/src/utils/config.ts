@@ -15,6 +15,7 @@ export const FeatureScenarioType = t.union([
   t.literal("WALLET"),
   t.literal("BONUS"),
   t.literal("SERVICES"),
+  t.literal("CGN"),
 ]);
 export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
 

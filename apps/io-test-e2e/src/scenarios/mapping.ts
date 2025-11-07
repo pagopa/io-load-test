@@ -1,5 +1,6 @@
 import { FeatureScenarioType } from "../utils/config";
 import { loadingServicesAppTab } from "./bonus";
+import { loadingCgnDataPortfolioTab } from "./cgn";
 import { appOpening } from "./landing";
 import { messageListAndDetail } from "./messages";
 import { loadingOnlyServicesAppTab } from "./services";
@@ -20,5 +21,7 @@ export const getFeatureScenario = (scenarioType: FeatureScenarioType) => {
       return loadingServicesAppTab;
     case "SERVICES":
       return loadingOnlyServicesAppTab;
+    case "CGN":
+      return loadingCgnDataPortfolioTab;
   }
 };

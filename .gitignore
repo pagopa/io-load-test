@@ -7,6 +7,8 @@ Publish
 
 .DS_Store
 dump.rdb
+.DS_Store
+.github
 
 *.user
 *.suo

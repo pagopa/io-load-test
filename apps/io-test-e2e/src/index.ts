@@ -5,7 +5,6 @@ import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporte
 import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
 import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
-import { appOpening } from "./scenarios/landing";
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
@@ -13,14 +12,13 @@ import * as AR from "fp-ts/Array";
 import { getFeatureScenario } from "./scenarios/mapping";
 import { getRedisClient } from "./utils/redis";
 import {
-  checkAndGetToken,
-  delKey,
+  getSessionTokenOrRefresh,
   keysInitializer,
   popListKeyAsJson,
   pushListKey,
-  setKey,
 } from "./utils/token";
 import { SharedArray } from "k6/data";
+import { identity } from "fp-ts/lib/function";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
@@ -36,35 +34,33 @@ const config = getConfigOrThrow(__ENV);
 export const options = {
   scenarios: {
     contacts: {
-      executor: "constant-arrival-rate",
+      executor: "ramping-arrival-rate",
 
-      // How long the test lasts
-      duration: config.duration,
+      startRate: 1,
+
+      stages: [
+        {target: 17, duration: "2m"},{target: 17, duration: "1m"},
+        {target: 132, duration: "2m"}, {target: 132, duration: "3m"},
+        //{target: 10, duration: "1m"}, {target: 10, duration: "1m"},
+        //{target: 50, duration: "2m"}, {target: 50, duration: "3m"},
+        //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
+      ],
 
       maxVUs: config.maxVUs,
-      // How many iterations per timeUnit
-      rate: config.rate,
-      /**
-        AzureDiagnostics
-        | where backendPoolName_s == "appbackend-app-address-pool"
-        | where requestUri_s != "/pagopa/api/v1/user" and requestUri_s != "/bpd/api/v1/user" and httpStatus_d != 404
-        | summarize requests = count() by clientIP_s, bin(TimeGenerated, 15m)
-        | summarize count() by clientIP_s
-        | summarize sum(count_)
-      */
 
       // Start `rate` iterations per second
       timeUnit: "1s",
 
       // Pre-allocate VUs (concurrent users)
       preAllocatedVUs: config.preAllocatedVUs,
+      gracefulStop: "1m"
     },
   },
 };
 
 const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 
-export const tokenChecker = checkAndGetToken(REDIS_CLIENT);
+export const newTokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);
 const queueInitializer = keysInitializer(REDIS_CLIENT);
 
 export default async function() {
@@ -74,30 +70,16 @@ export default async function() {
     TE.map((generatedKeyPair) => generatedKeyPair as GeneratedKeypair),
     TE.chain((key) =>
       pipe(
-        delKey(REDIS_CLIENT, key.thumbprint),
-        TE.chain(() =>
-          pipe(
-            lvScenario(config, key),
-            TE.of,
-            TE.chain((token) =>
-              pipe(
-                setKey(REDIS_CLIENT, key.thumbprint, token),
-                TE.chain(() =>
-                  pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-                ),
-                TE.map(() => token)
-              )
-            ),
-            TE.orElseW(() =>
-              pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-            )
-          )
+        config.ENABLE_LV_SCENERY,
+        TE.fromPredicate(identity, () => false),
+        TE.chainW(() =>
+          TE.tryCatch(() => lvScenario(config, REDIS_CLIENT, key), () => new Error("Error executing lvScenario")),
         ),
-        TE.chain(() =>
-          TE.tryCatch(
-            () => appOpening(config, key.thumbprint, tokenChecker),
-            E.toError
-          )
+        TE.chainW(() =>
+          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
+        ),
+        TE.orElseW(() =>
+          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
         ),
         TE.chain(() =>
           pipe(
@@ -110,7 +92,7 @@ export default async function() {
             (scenarios) =>
               scenarios.map((fn) =>
                 TE.tryCatch(
-                  () => fn(config, key.thumbprint, tokenChecker),
+                  async () => fn({ config, REDIS_CLIENT, key, tokenChecker:newTokenChecker }),
                   E.toError
                 )
               ),
@@ -119,7 +101,7 @@ export default async function() {
         )
       )
     ),
-    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)}`)),
+    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)} | ${e.stack} | ${e.message}`)),
     TE.toUnion
   )();
 }

@@ -11,24 +11,26 @@ import * as TE from "fp-ts/TaskEither";
 import { pipe } from "fp-ts/lib/function";
 import { PaginatedPublicMessagesCollection } from "../generated/definitions/backend/PaginatedPublicMessagesCollection";
 import { getResponseBodyAsType } from "../utils/responses";
+import { getK6DefaultHttpParams } from "../utils/http";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 const messagesDuration = new Trend("get_messages_duration");
 const messageDetailDuration = new Trend("get_message_detail_duration");
 
-export const messageListAndDetail = async (
-  config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
-) => {
+export const messageListAndDetail = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Retrieve users's messages
   const getFirstPageMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true`,
     {
-      headers: {
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
-        "Content-Type": "application/json",
-      },
-      responseType: "text",
+      ...(await getK6DefaultHttpParams(key, tokenChecker))
     }
   );
   check(getFirstPageMessages, {
@@ -50,7 +52,7 @@ export const messageListAndDetail = async (
         TE.fromEither,
         TE.bindTo("minimumId"),
         TE.bind("token2ndPage", () =>
-          TE.tryCatch(() => tokenChecker(thumbprint), E.toError)
+          TE.tryCatch(() => tokenChecker(key), E.toError)
         ),
         TE.map(({ minimumId, token2ndPage }) => {
             const getSecondPageMessages = http.get(
@@ -83,7 +85,7 @@ export const messageListAndDetail = async (
     TE.map((msg) => msg.id),
     TE.bindTo("messageId"),
     TE.bind("tokenGetDetail", () =>
-      TE.tryCatch(() => tokenChecker(thumbprint), E.toError)
+      TE.tryCatch(() => tokenChecker(key), E.toError)
     ),
     TE.map(({ messageId, tokenGetDetail }) =>{
       const getMessageDetail = http.get(

@@ -9,9 +9,13 @@ import { IntegerFromString } from "@pagopa/ts-commons/lib/numbers";
 import { BooleanFromString } from "io-ts-types";
 
 export const FeatureScenarioType = t.union([
+  t.literal("APP_OPENING"),
   t.literal("TRIAL"),
   t.literal("MESSAGE_DETAIL"),
   t.literal("WALLET"),
+  t.literal("BONUS"),
+  t.literal("SERVICES"),
+  t.literal("CGN"),
 ]);
 export type FeatureScenarioType = t.TypeOf<typeof FeatureScenarioType>;
 
@@ -20,13 +24,15 @@ export const FeatureScenarioEnabledType = t.type({
   SCENARIOS: CommaSeparatedListOf(FeatureScenarioType),
 });
 
-export type FeatureScenarioEnabledType = t.TypeOf<typeof FeatureScenarioEnabledType>;
+export type FeatureScenarioEnabledType = t.TypeOf<
+  typeof FeatureScenarioEnabledType
+>;
 
 export const FeatureScenarioConfig = t.union([
   t.type({
     FEATURE_ENABLED: t.literal(false),
   }),
-  FeatureScenarioEnabledType
+  FeatureScenarioEnabledType,
 ]);
 export type FeatureScenarioConfig = t.TypeOf<typeof FeatureScenarioConfig>;
 
@@ -60,6 +66,8 @@ export const IConfig = t.intersection([
     IO_BACKEND_TEST_PASSWD: NonEmptyString,
     TEST_FISCAL_CODE: CommaSeparatedListOf(FiscalCode),
     REDIS_CONN_STRING: NonEmptyString,
+    ENABLE_LV_SCENERY: t.boolean,
+    ENABLE_SSO_INTROSPECTION: t.boolean,
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -86,6 +94,16 @@ export const getConfigOrThrow = (
       ),
       FIXTURES_ENABLED: pipe(
         env.FIXTURES_ENABLED,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+      ENABLE_LV_SCENERY: pipe(
+        env.ENABLE_LV_SCENERY,
+        BooleanFromString.decode,
+        E.getOrElse(() => false)
+      ),
+      ENABLE_SSO_INTROSPECTION: pipe(
+        env.ENABLE_SSO_INTROSPECTION,
         BooleanFromString.decode,
         E.getOrElse(() => false)
       ),

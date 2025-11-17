@@ -21,6 +21,7 @@ import { NewMessage } from "../generated/definitions/services/NewMessage";
 import { faker as F } from "@faker-js/faker";
 import { CreatedMessage } from "../generated/definitions/services/CreatedMessage";
 import { InitializedProfile } from "../generated/definitions/backend/InitializedProfile";
+import { ServicesPreferencesModeEnum } from "../generated/definitions/backend/ServicesPreferencesMode";
 
 const generateTestMessage = (
   fiscalCode: FiscalCode,
@@ -159,6 +160,9 @@ const fixturesHandler = pipe(
                               body: {
                                 accepted_tos_version: 4.8,
                                 is_inbox_enabled: true,
+                                service_preferences_settings: {
+                                  mode: ServicesPreferencesModeEnum.AUTO
+                                },
                                 version: dbProfile.version,
                               },
                             })
@@ -259,7 +263,7 @@ const fixturesHandler = pipe(
                   TE.chain((res) => TE.fromTask(T.delay(500)(T.of(res))))
                 )
               ),
-            AR.sequence(TE.ApplicativeSeq),
+            AR.sequence(TE.ApplicativePar),
             logTaskEither(`Test messages sent for ${fiscalCode}`),
             TE.map((responses) => responses.length === 10)
           )

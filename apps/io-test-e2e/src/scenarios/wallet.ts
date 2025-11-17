@@ -10,6 +10,7 @@ import {
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
+import { GeneratedKeypair } from "../utils/lollipop";
 
 // Define metrics
 const localUrl = "http://localhost:8001";
@@ -21,8 +22,8 @@ const createWalletAttestationDuration = new Trend(
 // Function to get nonce
 const getNonce = async (
   config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
+  key: GeneratedKeypair,
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>
 ) => {
   // Perform HTTP GET request for nonce
   const response = http.get(
@@ -30,7 +31,7 @@ const getNonce = async (
     {
       headers: {
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        Authorization: `Bearer ${await tokenChecker(key)}`,
         "Content-Type": "application/json",
       },
       responseType: "text",
@@ -62,13 +63,17 @@ const getNonce = async (
 /* Function to handle wallet instance creation.
  * Warning: This work only with fiscal codes that starts with LVTEST00A00
  */
-export const walletInstanceCreation = async (
-  config: IConfig,
-  thumbprint: string,
-  tokenChecker: (thumbprint: string) => Promise<string>
-) => {
+export const walletInstanceCreation = async ({
+  config,
+  key,
+  tokenChecker
+}: {
+  config: IConfig;
+  key: GeneratedKeypair;
+  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+}) => {
   // Fetch nonce
-  const nonce = await getNonce(config, thumbprint, tokenChecker);
+  const nonce = await getNonce(config, key, tokenChecker);
 
   // Create key request
   const createKeyResponse = http.get(`${localUrl}/random-key`, {
@@ -101,7 +106,7 @@ export const walletInstanceCreation = async (
     {
       headers: {
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        Authorization: `Bearer ${await tokenChecker(key)}`,
         "Content-Type": "application/json",
       },
       responseType: "text",
@@ -119,7 +124,7 @@ export const walletInstanceCreation = async (
   );
 
   // Fetch second nonce
-  const secondNonce = await getNonce(config, thumbprint, tokenChecker);
+  const secondNonce = await getNonce(config, key, tokenChecker);
 
   // Create wallet attestation request (WAR)
   const createWarResponse = http.post(
@@ -155,7 +160,7 @@ export const walletInstanceCreation = async (
     {
       headers: {
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(thumbprint)}`,
+        Authorization: `Bearer ${await tokenChecker(key)}`,
         "Content-Type": "application/json",
       },
       responseType: "text",

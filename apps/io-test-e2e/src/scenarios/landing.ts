@@ -70,7 +70,7 @@ export const appOpening = async ({
   // Retrieve the session using the new token
   // Peak 115k req/h
   const getSession = http.get(
-    `${config.AUTH_BACKEND_BASE_URL}/api/v1/session`,
+    `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/session`,
     {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     }
@@ -107,7 +107,7 @@ export const appOpening = async ({
   const executeSecondGetSession = randomIntBetween(1, 10) < 6;
   if(executeSecondGetSession){
     const getSession2 = http.get(
-      `${config.AUTH_BACKEND_BASE_URL}/api/v1/session`,
+      `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/session`,
       {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       }
@@ -125,7 +125,7 @@ export const appOpening = async ({
 
   // Retrieve the profile using the new token
   // Peak 70k req/h
-  const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`, {
+  const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/identity/v1/profile`, {
     ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
@@ -143,7 +143,7 @@ export const appOpening = async ({
   const profile = JSON.parse(getProfile.body);
   if (profile.service_preferences_settings && profile.service_preferences_settings.mode == "LEGACY") {
     console.info(`Legacy mode detected for `, profile.fiscal_code);
-    const upsertProfile = http.post(`${config.IO_BACKEND_BASE_URL}/api/v1/profile`,JSON.stringify({...profile, service_preferences_settings: {mode: "AUTO"}}), {
+    const upsertProfile = http.post(`${config.IO_BACKEND_BASE_URL}/api/identity/v1/profile`,JSON.stringify({...profile, service_preferences_settings: {mode: "AUTO"}}), {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     check(upsertProfile, {
@@ -156,7 +156,7 @@ export const appOpening = async ({
   const executeUserDataProcessing = randomIntBetween(1, 27) == 1;
   if (executeUserDataProcessing) {
     console.debug(`executeUserDataProcessing`);
-    const deleteUserDataProcessing = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/user-data-processing/DELETE`, {
+    const deleteUserDataProcessing = http.get(`${config.IO_BACKEND_BASE_URL}/api/identity/v1/user-data-processing/DELETE`, {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
@@ -173,7 +173,7 @@ export const appOpening = async ({
 
   //check if fiscalCode is whitelisted for IT Wallet
   // Peak 55k req/h
-  const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/whitelisted-fiscal-code`, {
+  const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/whitelisted-fiscal-code`, {
     ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
@@ -188,7 +188,7 @@ export const appOpening = async ({
 
   //check wallet instance status
   // Peak 55k req/h
-  const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/wallet/wallet-instances/current/status`, {
+  const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/current/status`, {
     ...await getK6DefaultHttpParams(key, tokenChecker)
   });
   trackRequest({
@@ -204,7 +204,7 @@ export const appOpening = async ({
   // Retrieve SEND activation status
   // Peak 56k req/h
   const getSendActivationStatus = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
+    `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
     {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     }
@@ -222,14 +222,14 @@ export const appOpening = async ({
   // Retrieve users's messages
   // Peak 56k req/h
   const getMessages = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/messages?enrich_result_data=true&page_size=12&archived=false`,
+    `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?enrich_result_data=true&page_size=12&archived=false`,
     {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     }
   );
   trackRequest({
     response: getMessages,
-    checkTitle: "GET Users's messagess",
+    checkTitle: "GET Users's messages",
     successCounter: messagesSuccess,
     failureCounter: messagesFailure,
     durationTrend: messagesDuration,

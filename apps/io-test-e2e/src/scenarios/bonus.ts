@@ -55,7 +55,7 @@ export const loadingServicesAppTab = async ({
     console.debug(`executeServicesApis`);
     // Get featured services
     // Peak 29k req/h
-    const futuredServices = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/services/featured`, {
+    const futuredServices = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`, {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     }
     );
@@ -72,7 +72,7 @@ export const loadingServicesAppTab = async ({
 
     // Get featured institutions
     // Peak 29k req/h
-    const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`, {
+    const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`, {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
@@ -87,7 +87,7 @@ export const loadingServicesAppTab = async ({
 
     // List institutions page 1
     // Peak 29k req/h
-    const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`, {
+    const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`, {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({
@@ -104,7 +104,7 @@ export const loadingServicesAppTab = async ({
     // Peak 17k req/h
     const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
     if (executeIstitutionsSecondPage) {
-      const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`, {
+      const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`, {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       });
       trackRequest({
@@ -121,7 +121,7 @@ export const loadingServicesAppTab = async ({
     // Retrieve Bonus Elettrodomestici service
     // Estimated 29k req/h
     const getBonusService = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v2/services/01K8BG9QEVTHY17EDS79Z3FB29`,
+      `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01K8BG9QEVTHY17EDS79Z3FB29`,
       {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       }
@@ -139,7 +139,7 @@ export const loadingServicesAppTab = async ({
     // Retrieve Bonus Elettrodomestici service preferences
     // Estimated 29k req/h
     const getBonusServicePreferences = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v1/services/01K8BG9QEVTHY17EDS79Z3FB29/preferences`,
+      `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01K8BG9QEVTHY17EDS79Z3FB29/preferences`,
       {
         ...await getK6DefaultHttpParams(key, tokenChecker)
       }

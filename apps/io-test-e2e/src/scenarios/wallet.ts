@@ -27,7 +27,7 @@ const getNonce = async (
 ) => {
   // Perform HTTP GET request for nonce
   const response = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/nonce`,
+    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/nonce`,
     {
       headers: {
         Accept: "*/*",
@@ -101,7 +101,7 @@ export const walletInstanceCreation = async ({
 
   // Create wallet instance via POST
   const createWalletInstanceResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/wallet-instances`,
+    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
     JSON.stringify(walletInstanceCreationParams),
     {
       headers: {
@@ -155,7 +155,7 @@ export const walletInstanceCreation = async ({
 
   // Create wallet attestation
   const createWalletAttestationResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/wallet/token`,
+    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/token`,
     JSON.stringify(walletAttestationCreationParams),
     {
       headers: {

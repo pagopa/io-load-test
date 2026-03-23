@@ -60,7 +60,7 @@ export const loadingOnlyServicesAppTab = async ({
   // Get featured services
   // Peak 29k req/h
   const futuredServices = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v2/services/featured`,
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`,
     {
       ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
@@ -78,7 +78,7 @@ export const loadingOnlyServicesAppTab = async ({
   // Get featured institutions
   // Peak 29k req/h
   const futuredInstitutions = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v2/institutions/featured`,
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`,
     {
       ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
@@ -96,7 +96,7 @@ export const loadingOnlyServicesAppTab = async ({
   // List institutions page 1
   // Peak 29k req/h
   const institutionsFirstPage = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=0`,
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`,
     {
       ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }
@@ -116,7 +116,7 @@ export const loadingOnlyServicesAppTab = async ({
   const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
   if (executeIstitutionsSecondPage) {
     const institutionsSecondPage = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/v2/institutions?scope=NATIONAL&limit=10&offset=10`,
+      `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`,
       {
         ...(await getK6DefaultHttpParams(key, tokenChecker)),
       }
@@ -135,7 +135,7 @@ export const loadingOnlyServicesAppTab = async ({
   // Retrieve Bonus Elettrodomestici service
   // Estimated 29k req/h
   const getBonusService = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v2/services/01JSEAMB13Y8EE487F95F64H9W`,
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01JSEAMB13Y8EE487F95F64H9W`,
     {
       ...(await getK6DefaultHttpParams(key, tokenChecker)),
     }

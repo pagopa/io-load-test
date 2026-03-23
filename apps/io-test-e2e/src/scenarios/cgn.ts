@@ -26,7 +26,7 @@ export const loadingCgnDataPortfolioTab = async ({
     console.debug(`executeCgnApi`);
     // Get CGN status
     // Peak 29k req/h
-    const getCgnStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/cgn/status`, {
+    const getCgnStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/cgn-card/v1/status`, {
       ...await getK6DefaultHttpParams(key, tokenChecker)
     });
     trackRequest({

@@ -28,7 +28,7 @@ export const messageListAndDetail = async ({
 }) => {
   // Retrieve users's messages
   const getFirstPageMessages = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true`,
+    `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?page_size=10&enrich_result_data=true`,
     {
       ...(await getK6DefaultHttpParams(key, tokenChecker))
     }
@@ -56,7 +56,7 @@ export const messageListAndDetail = async ({
         ),
         TE.map(({ minimumId, token2ndPage }) => {
             const getSecondPageMessages = http.get(
-              `${config.IO_BACKEND_BASE_URL}/api/v1/messages?page_size=10&enrich_result_data=true&minimum_id=${minimumId}`,
+              `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?page_size=10&enrich_result_data=true&minimum_id=${minimumId}`,
               {
                 headers: {
                   Authorization: `Bearer ${token2ndPage}`,
@@ -89,7 +89,7 @@ export const messageListAndDetail = async ({
     ),
     TE.map(({ messageId, tokenGetDetail }) =>{
       const getMessageDetail = http.get(
-        `${config.IO_BACKEND_BASE_URL}/api/v1/messages/${messageId}`,
+        `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages/${messageId}`,
         {
           headers: {
             Authorization: `Bearer ${tokenGetDetail}`,

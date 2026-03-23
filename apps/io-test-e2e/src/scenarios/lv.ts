@@ -40,7 +40,7 @@ export const lvScenario = async (
   let duration = 0;
   // Generate Nonce
   const generateNonceResponse = http.post(
-    `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login/nonce/generate`,
+    `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login/nonce/generate`,
     undefined,
     {
       headers: {
@@ -73,7 +73,7 @@ export const lvScenario = async (
     privateKeyJwk: JSON.stringify(key.privateKey),
     thumbprint: key.thumbprint,
     nonce,
-    url: config.AUTH_BACKEND_BASE_URL + "/api/v1/fast-login",
+    url: config.AUTH_BACKEND_BASE_URL + "/api/auth/v1/fast-login",
   };
   const signerResponse = http.post(
     `http://localhost:8001/signature-params`,
@@ -105,12 +105,12 @@ export const lvScenario = async (
 
   // Refresh the session using Lollipop signature
   const refreshSession = http.post(
-    `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login`,
+    `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
     undefined,
     {
       headers: {
         "x-pagopa-lollipop-original-method": "POST",
-        "x-pagopa-lollipop-original-url": `${config.AUTH_BACKEND_BASE_URL}/api/v1/fast-login`,
+        "x-pagopa-lollipop-original-url": `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
         signature: lollipopParams.signature,
         "signature-input": lollipopParams.signatureInput,
         "Content-Type": "application/json",

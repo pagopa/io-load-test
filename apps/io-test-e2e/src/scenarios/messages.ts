@@ -9,7 +9,7 @@ import { IConfig } from "../utils/config";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
 import { pipe } from "fp-ts/lib/function";
-import { PaginatedPublicMessagesCollection } from "../generated/definitions/backend/PaginatedPublicMessagesCollection";
+import { PaginatedPublicMessagesCollection } from "../generated/definitions/messages/PaginatedPublicMessagesCollection";
 import { getResponseBodyAsType } from "../utils/responses";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { GeneratedKeypair } from "../utils/lollipop";

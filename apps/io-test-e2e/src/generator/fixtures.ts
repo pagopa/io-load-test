@@ -8,7 +8,7 @@ import * as E from "fp-ts/Either";
 import * as O from "fp-ts/Option";
 import { FiscalCode, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { createClient } from "../generated/definitions/services/client";
-import { createClient as createBEClient } from "../generated/definitions/backend/client";
+import { createClient as createBEClient } from "../generated/definitions/identity/client";
 
 import * as NAR from "fp-ts/NonEmptyArray";
 import * as AR from "fp-ts/Array";
@@ -20,8 +20,8 @@ import * as r from "@pagopa/ts-commons/lib/requests";
 import { NewMessage } from "../generated/definitions/services/NewMessage";
 import { faker as F } from "@faker-js/faker";
 import { CreatedMessage } from "../generated/definitions/services/CreatedMessage";
-import { InitializedProfile } from "../generated/definitions/backend/InitializedProfile";
-import { ServicesPreferencesModeEnum } from "../generated/definitions/backend/ServicesPreferencesMode";
+import { InitializedProfile } from "../generated/definitions/identity/InitializedProfile";
+import { ServicesPreferencesModeEnum } from "../generated/definitions/identity/ServicesPreferencesMode";
 
 const generateTestMessage = (
   fiscalCode: FiscalCode,
@@ -89,7 +89,7 @@ const fixturesHandler = pipe(
       O.bind("backendIOClient", () =>
         O.some(
           createBEClient({
-            basePath: "/api/v1",
+            basePath: "/api/identity/v1",
             baseUrl: `${config.IO_BACKEND_BASE_URL}`,
             fetchApi: fetch,
           })

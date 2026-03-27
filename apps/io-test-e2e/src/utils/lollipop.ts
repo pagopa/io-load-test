@@ -49,7 +49,7 @@ export const initNewLollipopKey = (config: IConfig) => async (
     })
   );
   const loginIOBackendClient = createClient({
-    basePath: "",
+    basePath: "/api/auth/v1",
     baseUrl: config.IO_BACKEND_BASE_URL,
     fetchApi: fetch,
   });

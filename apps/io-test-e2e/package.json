@@ -21,7 +21,7 @@
     "generate:session-manager": "rimraf ./src/generated/definitions/session-manager && shx mkdir -p ./src/generated/definitions/session-manager && gen-api-models --api-spec https://raw.githubusercontent.com/pagopa/io-auth-n-identity-domain/refs/heads/main/apps/io-session-manager/api/external.yaml --no-strict --out-dir ./src/generated/definitions/session-manager --request-types --response-decoders --client"
   },
   "devDependencies": {
-    "@babel/core": "7.13.16",
+    "@babel/core": "7.29.6",
     "@babel/plugin-proposal-class-properties": "7.13.0",
     "@babel/plugin-proposal-object-rest-spread": "7.13.8",
     "@babel/preset-env": "^7.23.3",

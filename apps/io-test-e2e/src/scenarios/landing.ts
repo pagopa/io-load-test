@@ -289,9 +289,14 @@ export const appOpening = async ({
         PaginatedPublicMessagesCollection
       ),
       TE.fromEither,
-      TE.map((res) => 
-        res.items[0].id
+      TE.chain((res) =>
+        pipe(
+          res.items[0],
+          E.fromNullable(new Error("No messages available")),
+          TE.fromEither
+        )
       ),
+      TE.map((message) => message.id),
       TE.bindTo("messagesId"),
       TE.bind("requestDefaultsAndRefreshToken", () =>
         TE.tryCatch(() => getK6DefaultHttpParams(key, tokenChecker), E.toError)

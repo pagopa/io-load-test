@@ -249,7 +249,7 @@ export const loadingOnlyServicesAppTab = async ({
     bonusServicesResponses.forEach((res) => {
       trackRequest({
         response: res,
-        checkTitle: "GET Bonus Elettrodomestici Service",
+        checkTitle: "GET Service",
         successCounter: bonusElettrodomesticiServiceSuccess,
         failureCounter: bonusElettrodomesticiServiceFailure,
         durationTrend: bonusElettrodomesticiServiceDuration,

@@ -16,7 +16,7 @@ import { Counter, Trend } from "k6/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { trackRequest } from "../utils/metrics";
-import { Client } from "k6/experimental/redis";
+import { Client } from "k6/x/redis";
 import { acquireLockOrWait, delKey, releaseLock, setKey } from "../utils/token";
 
 const generateNonceDuration = new Trend("generate_nonce_duration");

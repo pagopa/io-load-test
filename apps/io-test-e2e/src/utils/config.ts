@@ -68,6 +68,7 @@ export const IConfig = t.intersection([
     REDIS_CONN_STRING: NonEmptyString,
     ENABLE_LV_SCENERY: t.boolean,
     ENABLE_SSO_INTROSPECTION: t.boolean,
+    SERVICES_BASE_RATE_PERCENTAGE: t.number
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -107,6 +108,11 @@ export const getConfigOrThrow = (
         BooleanFromString.decode,
         E.getOrElse(() => false)
       ),
+      SERVICES_BASE_RATE_PERCENTAGE: pipe(
+        env.SERVICES_BASE_RATE_PERCENTAGE,
+        IntegerFromString.decode,
+        E.getOrElse(() => 100)
+      )
     }),
     IConfig.decode,
     E.getOrElseW((errs) => {

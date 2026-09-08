@@ -11,13 +11,15 @@ import { IConfig } from "../utils/config";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
-import { Client } from "k6/experimental/redis";
+import { Client } from "k6/x/redis";
 import { setKey } from "../utils/token";
 import { flow, pipe } from "fp-ts/lib/function";
 import { PublicSession } from "../generated/definitions/session-manager/PublicSession";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
 import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
+import { getResponseBodyAsType } from "../utils/responses";
+import { PaginatedPublicMessagesCollection } from "../generated/definitions/messages/PaginatedPublicMessagesCollection";
 
 const pingDuration = new Trend("get_ping_duration");
 const pingFailure = new Counter("get_ping_failure");
@@ -37,13 +39,24 @@ const fiscalCodeWhitelistSuccess = new Counter("get_fiscal_code_whitelist_succes
 const walletInstanceStatusDuration = new Trend("get_wallet_instance_status_duration");
 const walletInstanceStatusFailure = new Counter("get_wallet_instance_status_failure");
 const walletInstanceStatusSuccess = new Counter("get_wallet_instance_status_success");
+const walletInstanceStatusWithIdDuration = new Trend("get_wallet_instance_status_wid_duration");
+const walletInstanceStatusWithIdFailure = new Counter("get_wallet_instance_status_wid_failure");
+const walletInstanceStatusWithIdSuccess = new Counter("get_wallet_instance_status_wid_success");
 const sendActivationStatusDuration = new Trend("get_send_activation_status");
 const sendActivationStatusFailure = new Counter("get_send_activation_failure");
 const sendActivationStatusSuccess = new Counter("get_send_activation_success");
 const messagesDuration = new Trend("get_opening_messages_duration");
 const messagesFailure = new Counter("get_opening_messages_failure");
 const messagesSuccess = new Counter("get_opening_messages_success");
+const messageDuration = new Trend("get_opening_message_detail_duration");
+const messageFailure = new Counter("get_opening_message_detail_failure");
+const messageSuccess = new Counter("get_opening_message_detail_success");
 
+/**
+ * Loading app base scenario. Assuming as base rate the GET Profile api call
+ * with 167k req/h, the other APIs are scaled accordingly inside the function.
+ * @param param0 The parameters required for the app opening scenario, including configuration, key, Redis client, and token checker function.
+ */
 export const appOpening = async ({
   config,
   key,
@@ -56,7 +69,7 @@ export const appOpening = async ({
   tokenChecker: (key: GeneratedKeypair) => Promise<string>;
 }) => {
   // Check if App is online
-  // Peak 650k req/h
+  // Peak 371k req/h
   const isOnline = http.get(`${config.IO_BACKEND_BASE_URL}/api/v1/ping`);
   trackRequest({
     response: isOnline,
@@ -68,7 +81,7 @@ export const appOpening = async ({
   });
 
   // Retrieve the session using the new token
-  // Peak 115k req/h
+  // Peak 225k req/h
   const getSession = http.get(
     `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/session`,
     {
@@ -104,7 +117,7 @@ export const appOpening = async ({
     console.error(`Error storing BPD token for key ${key.thumbprint}|DETAIL => ${e.message}`);
   });
   // Occasionally execute a second get session to simulate multiple app tabs
-  const executeSecondGetSession = randomIntBetween(1, 10) < 6;
+  const executeSecondGetSession = randomIntBetween(1, 10) < 4;
   if(executeSecondGetSession){
     const getSession2 = http.get(
       `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/session`,
@@ -124,7 +137,7 @@ export const appOpening = async ({
   }
 
   // Retrieve the profile using the new token
-  // Peak 70k req/h
+  // Peak 167k req/h
   const getProfile = http.get(`${config.IO_BACKEND_BASE_URL}/api/identity/v1/profile`, {
     ...await getK6DefaultHttpParams(key, tokenChecker)
   });
@@ -152,8 +165,8 @@ export const appOpening = async ({
   }
 
   // Check if a delete profile operation is in progress
-  // Peak 2.8k req/h
-  const executeUserDataProcessing = randomIntBetween(1, 27) == 1;
+  // Peak 4.8k req/h
+  const executeUserDataProcessing = randomIntBetween(1, 35) == 1;
   if (executeUserDataProcessing) {
     console.debug(`executeUserDataProcessing`);
     const deleteUserDataProcessing = http.get(`${config.IO_BACKEND_BASE_URL}/api/identity/v1/user-data-processing/DELETE`, {
@@ -170,57 +183,84 @@ export const appOpening = async ({
     });
   }
 
+  const executeWalletInit = randomIntBetween(1, 100) <= 68;
+  if (executeWalletInit) {
+    console.debug(`executeWalletInit`);
+    //check if fiscalCode is whitelisted for IT Wallet
+    // Peak 113k req/h
+    const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/whitelisted-fiscal-code`, {
+      ...await getK6DefaultHttpParams(key, tokenChecker)
+    });
+    trackRequest({
+      response: isFiscalCodeWhitelisted,
+      checkTitle: "GET FiscalCode Whitelist",
+      successCounter: fiscalCodeWhitelistSuccess,
+      failureCounter: fiscalCodeWhitelistFailure,
+      durationTrend: fiscalCodeWhitelistDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
+    });
 
-  //check if fiscalCode is whitelisted for IT Wallet
-  // Peak 55k req/h
-  const isFiscalCodeWhitelisted = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/whitelisted-fiscal-code`, {
-    ...await getK6DefaultHttpParams(key, tokenChecker)
-  });
-  trackRequest({
-    response: isFiscalCodeWhitelisted,
-    checkTitle: "GET FiscalCode Whitelist",
-    successCounter: fiscalCodeWhitelistSuccess,
-    failureCounter: fiscalCodeWhitelistFailure,
-    durationTrend: fiscalCodeWhitelistDuration,
-    successStatuses: [200],
-    skipStatuses: [401]
-  });
+    //check wallet instance status
+    // Peak 113k req/h
+    const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/current/status`, {
+      ...await getK6DefaultHttpParams(key, tokenChecker)
+    });
+    trackRequest({
+      response: getWalletInstanceStatus,
+      checkTitle: "GET Wallet Instance Status",
+      successCounter: walletInstanceStatusSuccess,
+      failureCounter: walletInstanceStatusFailure,
+      durationTrend: walletInstanceStatusDuration,
+      successStatuses: [200, 404],
+      skipStatuses: [401]
+    });
 
-  //check wallet instance status
-  // Peak 55k req/h
-  const getWalletInstanceStatus = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/current/status`, {
-    ...await getK6DefaultHttpParams(key, tokenChecker)
-  });
-  trackRequest({
-    response: getWalletInstanceStatus,
-    checkTitle: "GET Wallet Instance Status",
-    successCounter: walletInstanceStatusSuccess,
-    failureCounter: walletInstanceStatusFailure,
-    durationTrend: walletInstanceStatusDuration,
-    successStatuses: [200, 404],
-    skipStatuses: [401]
-  });
+    //check wallet instance status
+    // Peak 76k req/h
+    const executeWalletInstanceStatusWithId = randomIntBetween(1, 100) <= 68;
+    if (executeWalletInstanceStatusWithId) {
+      console.debug(`executeWalletInstanceStatusWithId`);
+      const getWalletInstanceStatusWithId = http.get(`${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/${profile.fiscal_code}/status`, {
+        ...await getK6DefaultHttpParams(key, tokenChecker)
+      });
+      trackRequest({
+        response: getWalletInstanceStatusWithId,
+        checkTitle: "GET Wallet Instance Status with ID",
+        successCounter: walletInstanceStatusWithIdSuccess,
+        failureCounter: walletInstanceStatusWithIdFailure,
+        durationTrend: walletInstanceStatusWithIdDuration,
+        successStatuses: [200, 404],
+        skipStatuses: [401]
+      });
+    }
+  }
 
   // Retrieve SEND activation status
-  // Peak 56k req/h
-  const getSendActivationStatus = http.get(
-    `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
-    {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    }
-  );
-  trackRequest({
-    response: getSendActivationStatus,
-    checkTitle: "GET SEND activation status",
-    successCounter: sendActivationStatusSuccess,
-    failureCounter: sendActivationStatusFailure,
-    durationTrend: sendActivationStatusDuration,
-    successStatuses: [200],
-    skipStatuses: [401]
-  });
+  // Peak 117k req/h
+  const executeGetSendActivation = randomIntBetween(1, 100) <= 70;
+  if (executeGetSendActivation) {
+    console.debug(`executeGetSendActivation`);
+    const getSendActivationStatus = http.get(
+      `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01G40DWQGKY5GRWSNM4303VNRP/preferences`,
+      {
+        ...await getK6DefaultHttpParams(key, tokenChecker)
+      }
+    );
+    trackRequest({
+      response: getSendActivationStatus,
+      checkTitle: "GET SEND activation status",
+      successCounter: sendActivationStatusSuccess,
+      failureCounter: sendActivationStatusFailure,
+      durationTrend: sendActivationStatusDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
+    });
+  }
 
+  console.debug(`executeGetMessages`);
   // Retrieve users's messages
-  // Peak 56k req/h
+  // Peak 161k req/h
   const getMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?enrich_result_data=true&page_size=12&archived=false`,
     {
@@ -236,4 +276,49 @@ export const appOpening = async ({
     successStatuses: [200],
     skipStatuses: [401]
   });
+
+
+  // Retrieve user's message by ID
+  // Peak 94.5k req/h
+  const executeGetMessage = randomIntBetween(1, 100) <= 57;
+  if (executeGetMessage) {
+    console.debug(`executeGetMessage`);
+    await pipe(
+      getResponseBodyAsType(
+        getMessages.body,
+        PaginatedPublicMessagesCollection
+      ),
+      TE.fromEither,
+      TE.chain((res) =>
+        pipe(
+          res.items[0],
+          E.fromNullable(new Error("No messages available")),
+          TE.fromEither
+        )
+      ),
+      TE.map((message) => message.id),
+      TE.bindTo("messagesId"),
+      TE.bind("requestDefaultsAndRefreshToken", () =>
+        TE.tryCatch(() => getK6DefaultHttpParams(key, tokenChecker), E.toError)
+      ),
+      TE.map(({ messagesId, requestDefaultsAndRefreshToken }) => {
+          const getMessage = http.get(
+            `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages/${messagesId}`,
+            {
+              ...requestDefaultsAndRefreshToken
+            }
+          );
+          trackRequest({
+            response: getMessage,
+            checkTitle: "GET User's message by ID",
+            successCounter: messageSuccess,
+            failureCounter: messageFailure,
+            durationTrend: messageDuration,
+            successStatuses: [200],
+            skipStatuses: [401]
+          });
+        }
+      )
+    )();
+  }
 };

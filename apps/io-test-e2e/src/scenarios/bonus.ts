@@ -7,7 +7,7 @@ import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
 import { checkAndGetToken } from "../utils/token";
-import { Client } from "k6/experimental/redis";
+import { Client } from "k6/x/redis";
 
 const featuredServicesDuration = new Trend("get_featured_services");
 const featuredServicesSuccess = new Counter("get_featured_services_success");

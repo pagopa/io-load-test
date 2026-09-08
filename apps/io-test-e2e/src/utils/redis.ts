@@ -1,5 +1,5 @@
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
-import redis from "k6/experimental/redis";
+import redis, { Client } from "k6/x/redis";
 
-export const getRedisClient = (connectionString: NonEmptyString): redis.Client =>
-  new redis.Client(`${connectionString}` as any);
+export const getRedisClient = (connectionString: NonEmptyString): Client =>
+  new redis.Client(`${connectionString}`);

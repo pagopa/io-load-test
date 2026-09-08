@@ -1341,10 +1341,10 @@
   resolved "https://registry.yarnpkg.com/@types/json-schema/-/json-schema-7.0.15.tgz#596a1747233694d50f6ad8a7869fcb6f56cf5841"
   integrity sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==
 
-"@types/k6@~0.45.0":
-  version "0.45.3"
-  resolved "https://registry.yarnpkg.com/@types/k6/-/k6-0.45.3.tgz#52054dee45d1470652745ee57b6dab2d99625386"
-  integrity sha512-HkB61Bz08E9462J72igdDf+M6uMn5GLEIYUxfojWcOm/7lLEapySgsEPVXYRyPbCX/xUn77iCG8PxOJnndNZzQ==
+"@types/k6@^2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@types/k6/-/k6-2.2.0.tgz#f294814f8782c1a70ff98f3a818fb74ad30a28ed"
+  integrity sha512-wuHM+JLcpV0VL2G8ltu0N3ZDbbq1GHkP5ypeMzTZcFFqpN8ioV0DojxQFKvlbnVzuhgnY7Yy+Hhl8LzstdplhQ==
 
 "@types/mime@*":
   version "3.0.4"

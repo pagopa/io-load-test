@@ -11,7 +11,7 @@ import { IConfig } from "../utils/config";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { GeneratedKeypair } from "../utils/lollipop";
-import { Client } from "k6/experimental/redis";
+import { Client } from "k6/x/redis";
 import { setKey } from "../utils/token";
 import { flow, pipe } from "fp-ts/lib/function";
 import { PublicSession } from "../generated/definitions/session-manager/PublicSession";

@@ -1,5 +1,5 @@
 import { sleep } from "k6";
-import redis from "k6/experimental/redis";
+import { Client } from "k6/x/redis";
 import { GeneratedKeypair } from "./lollipop";
 import { flow, pipe } from "fp-ts/lib/function";
 import * as TE from "fp-ts/lib/TaskEither";
@@ -11,7 +11,7 @@ import { lvScenario } from "../scenarios/lv";
 // @ts-ignore
 import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
-export const checkAndGetToken = (redisClient: redis.Client) => async (
+export const checkAndGetToken = (redisClient: Client) => async (
   thumbprint: string
 ) => {
   let token: string = "";
@@ -34,7 +34,7 @@ export const checkAndGetToken = (redisClient: redis.Client) => async (
   return token;
 };
 
-export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: IConfig, counter: number = 0) => async (
+export const getSessionTokenOrRefresh = (redisClient: Client, config: IConfig, counter: number = 0) => async (
   key: GeneratedKeypair
 ): Promise<string> => {
   if(counter > 20) {
@@ -60,12 +60,12 @@ export const getSessionTokenOrRefresh = (redisClient: redis.Client, config: ICon
   return token;
 }
 
-export const keysInitializer = (redisClient: redis.Client) => (
+export const keysInitializer = (redisClient: Client) => (
   key: string,
   keys: ReadonlyArray<GeneratedKeypair>
 ): TE.TaskEither<Error, unknown> =>
   pipe(
-    TE.tryCatch(() => redisClient.exists([key]), E.toError),
+    TE.tryCatch(() => redisClient.exists(key), E.toError),
     TE.map(O.fromPredicate((n) => n === 0)),
     TE.chain(
       flow(
@@ -90,7 +90,7 @@ export const keysInitializer = (redisClient: redis.Client) => (
   );
 
 export const popListKeyAsJson = (
-  redisClient: redis.Client,
+  redisClient: Client,
   key: string
 ): TE.TaskEither<Error, J.Json> =>
   pipe(
@@ -108,7 +108,7 @@ export const popListKeyAsJson = (
   );
 
 export const pushListKey = (
-  redisClient: redis.Client,
+  redisClient: Client,
   key: string,
   value: string
 ): TE.TaskEither<Error, number> =>
@@ -123,7 +123,7 @@ export const pushListKey = (
   );
 
 export const getKeyAsType = (
-  redisClient: redis.Client,
+  redisClient: Client,
   key: string
 ): TE.TaskEither<Error, string> =>
   TE.tryCatch(
@@ -137,7 +137,7 @@ export const getKeyAsType = (
   );
 
 export const acquireLockOrWait = async (
-  redisClient: redis.Client,
+  redisClient: Client,
   thumbprint: string
 ): Promise<void> => {
   try {
@@ -160,7 +160,7 @@ export const acquireLockOrWait = async (
 }
 
 export const releaseLock = async (
-  redisClient: redis.Client,
+  redisClient: Client,
   thumbprint: string
 ): Promise<void> => {
   try {
@@ -172,7 +172,7 @@ export const releaseLock = async (
 }
 
 export const setKey = (
-  redisClient: redis.Client,
+  redisClient: Client,
   key: string,
   value: string
 ): TE.TaskEither<Error, string> =>
@@ -185,11 +185,11 @@ export const setKey = (
   );
 
 export const delKey = (
-  redisClient: redis.Client,
+  redisClient: Client,
   key: string
 ): TE.TaskEither<Error, number> =>
   TE.tryCatch(
-    () => redisClient.del([key]),
+    () => redisClient.del(key),
     (err) =>
       Error(
         `Error while del on redis, method=delKey |DETAIL=${JSON.stringify(err)}`

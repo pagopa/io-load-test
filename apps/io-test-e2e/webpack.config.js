@@ -44,6 +44,10 @@ module.exports = {
   },
   plugins: [
     new CleanWebpackPlugin(),
+    new webpack.BannerPlugin({
+      banner: '"use k6 with k6/x/redis";',
+      raw: true,
+    }),
     // Copy assets to the destination folder
     // see `src/post-file-test.ts` for an test example using an asset
     new CopyPlugin({

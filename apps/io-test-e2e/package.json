@@ -5,7 +5,8 @@
   "main": "/dist/index.js",
   "license": "MIT",
   "scripts": {
-    "start": "dotenv -e .env k6 run --http-debug=\"full\" dist/index.js",
+    "start": "dotenv -e .env k6 run dist/index.js",
+    "start:debug": "dotenv -e .env k6 run --http-debug=\"full\" dist/index.js",
     "data": "dotenv -e .env ts-node ./src/generator/keys.ts > ./data/keys.json",
     "fixtures": "dotenv -e .env ts-node ./src/generator/fixtures.ts",
     "signer": "ts-node ./src/generator/signer.ts",

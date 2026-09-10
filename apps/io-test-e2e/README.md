@@ -101,7 +101,8 @@ All scripts are executed inside `apps/io-test-e2e`:
 
 | Command | Description |
 | ------- | ----------- |
-| `yarn start` | Runs the compiled k6 bundle (`dist/index.js`) using `dotenv-cli` with `--http-debug="full"`. |
+| `yarn start` | Runs the compiled k6 bundle (`dist/index.js`) using `dotenv-cli`. |
+| `yarn start:debug` | Same as `yarn start` with `--http-debug="full"` (verbose HTTP logs; not for high-rate runs). |
 | `yarn build` | Builds the k6 bundle using Webpack with `NODE_OPTIONS=--openssl-legacy-provider` in production mode. |
 | `yarn data` | Runs `src/generator/keys.ts` with `ts-node` and outputs generated test user Lollipop key pairs in JSON format to stdout (used as `yarn -s data > ./data/keys.json`). |
 | `yarn signer` | Starts the Express HTTP signing service (`src/generator/signer.ts`) with `ts-node`. Provides endpoints for lollipop HTTP signatures, random JWK keys, and wallet attestation requests. |
@@ -144,8 +145,17 @@ It is possible to disable the LV scenario (`ENABLE_LV_SCENERY=false`) to generat
 The `BONUS` scenario can use an introspection API for the SSO token. To perform this API call without receiving a `401 Unauthorized`, the `k6` client IP must be added to the IP Whitelist on the Session Manager. This API call is toggled via `ENABLE_SSO_INTROSPECTION`.
 
 ## Stable configuration for tests
-The stability of the tool during load test execution is granted when the response of the backend services is almost stable and the number of max VUs is less than double the number of available Fiscal Codes declared in `TEST_FISCAL_CODE`.
-For example, if there are `500` Fiscal Codes available for the test, use at most `800` max VUs.
+Each iteration leases one Lollipop key (fiscal code) for the whole journey: Fast Login, then APP_OPENING / SERVICES / CGN. Arrival-rate executors follow Little's law:
+
+`neededVUs ≈ rate × p95(iteration_duration)`
+
+and, because a key cannot be used by two in-flight iterations:
+
+`rate × p95(iteration_duration) ≲ |TEST_FISCAL_CODE|`
+
+Set `preAllocatedVUs` close to that estimate. Avoid a large gap between `preAllocatedVUs` and `maxVUs`: k6 allocating VUs at runtime skews the load generator.
+
+Independent HTTP calls inside a journey run concurrently (`http.asyncRequest` / `Promise.all`). Feature scenarios selected in `SCENARIOS` overlap after Fast Login. Session tokens are kept in VU memory after LV so later API calls do not poll Redis.
 
 ## Load test diagrams
 High level load test flow chart:

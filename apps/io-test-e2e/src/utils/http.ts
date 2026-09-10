@@ -1,14 +1,18 @@
-import http, { ExpectedStatusesObject, RefinedParams } from "k6/http"
-import { GeneratedKeypair } from "./lollipop"
+import { RefinedParams, ResponseType } from "k6/http";
 
-export const getK6DefaultHttpParams = async (key: GeneratedKeypair, tokenChecker: (key: GeneratedKeypair) => Promise<string>, statuses?: Array<number | ExpectedStatusesObject>): Promise<RefinedParams<"text">> => {
-  return {
-    headers: {
-      Authorization: `Bearer ${await tokenChecker(key)}`,
-      "Content-Type": "application/json",
-    },
-    timeout: "12s",
-    responseType: "text",
-    responseCallback: statuses ? http.expectedStatuses(...statuses) : undefined
+export type HttpParams = RefinedParams<ResponseType>;
+
+export const getK6DefaultHttpParams = (
+  token: string,
+  options?: {
+    responseType?: ResponseType;
+    timeout?: string;
   }
-}
+): HttpParams => ({
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+  timeout: options?.timeout ?? "12s",
+  responseType: options?.responseType ?? "none",
+});

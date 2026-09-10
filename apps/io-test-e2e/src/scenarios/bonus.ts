@@ -43,140 +43,127 @@ export const loadingServicesAppTab = async ({
   config,
   key,
   REDIS_CLIENT,
-  tokenChecker
+  token
 }: {
   config: IConfig;
   key: GeneratedKeypair;
   REDIS_CLIENT: Client;
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+  token: string;
 }) => {
   const executeServicesApis = randomIntBetween(1, 100) < 41;
-  if (executeServicesApis) {
-    console.debug(`executeServicesApis`);
-    // Get featured services
-    // Peak 29k req/h
-    const futuredServices = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`, {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    }
-    );
-    trackRequest({
-      response: futuredServices,
-      checkTitle: "GET featured services",
-      successCounter: featuredServicesSuccess,
-      failureCounter: featuredServicesFailure,
-      durationTrend: featuredServicesDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-
-
-    // Get featured institutions
-    // Peak 29k req/h
-    const futuredInstitutions = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`, {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    });
-    trackRequest({
-      response: futuredInstitutions,
-      checkTitle: "GET featured institutions",
-      successCounter: featuredInstitutionsSuccess,
-      failureCounter: featuredInstitutionsFailure,
-      durationTrend: featuredInstitutionsDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-
-    // List institutions page 1
-    // Peak 29k req/h
-    const institutionsFirstPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`, {
-      ...await getK6DefaultHttpParams(key, tokenChecker)
-    });
-    trackRequest({
-      response: institutionsFirstPage,
-      checkTitle: "GET institutions page 1",
-      successCounter: institutionsPageOneSuccess,
-      failureCounter: institutionsPageOneFailure,
-      durationTrend: institutionsPageOneDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-
-    // List institutions page 2
-    // Peak 17k req/h
-    const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
-    if (executeIstitutionsSecondPage) {
-      const institutionsSecondPage = http.get(`${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`, {
-        ...await getK6DefaultHttpParams(key, tokenChecker)
-      });
-      trackRequest({
-        response: institutionsSecondPage,
-        checkTitle: "GET institutions page 2",
-        successCounter: institutionsPageTwoSuccess,
-        failureCounter: institutionsPageTwoFailure,
-        durationTrend: institutionsPageTwoDuration,
-        successStatuses: [200],
-        skipStatuses: [401]
-      });
-    }
-
-    // Retrieve Bonus Elettrodomestici service
-    // Estimated 29k req/h
-    const getBonusService = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01K8BG9QEVTHY17EDS79Z3FB29`,
-      {
-        ...await getK6DefaultHttpParams(key, tokenChecker)
-      }
-    );
-    trackRequest({
-      response: getBonusService,
-      checkTitle: "GET Bonus Elettrodomestici Service",
-      successCounter: bonusElettrodomesticiServiceSuccess,
-      failureCounter: bonusElettrodomesticiServiceFailure,
-      durationTrend: bonusElettrodomesticiServiceDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-
-    // Retrieve Bonus Elettrodomestici service preferences
-    // Estimated 29k req/h
-    const getBonusServicePreferences = http.get(
-      `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01K8BG9QEVTHY17EDS79Z3FB29/preferences`,
-      {
-        ...await getK6DefaultHttpParams(key, tokenChecker)
-      }
-    );
-    trackRequest({
-      response: getBonusServicePreferences,
-      checkTitle: "GET Bonus Elettrodomestici Service preferences",
-      successCounter: bonusElettrodomesticiServicePreferencesSuccess,
-      failureCounter: bonusElettrodomesticiServicePreferencesFailure,
-      durationTrend: bonusElettrodomesticiServicePreferencesDuration,
-      successStatuses: [200],
-      skipStatuses: [401]
-    });
-
-    if(config.ENABLE_SSO_INTROSPECTION) {
-      // Simulate SSO introspection call
-      // Peak 29k req/h
-      const getBPDUser = http.get(
-        `${config.AUTH_BACKEND_BASE_URL}/api/sso/bpd/v1/user`,
-        {
-          headers: {
-            Authorization: `Bearer ${await checkAndGetToken(REDIS_CLIENT)(`${key.thumbprint}-bpd-token`)}`,
-            "Content-Type": "application/json",
-          },
-          timeout: "12s",
-          responseType: "text",
-        }
-      );
-      trackRequest({
-        response: getBPDUser,
-        checkTitle: "GET BPD User",
-        successCounter: bpdUserSuccess,
-        failureCounter: bpdUserFailure,
-        durationTrend: bpdUserDuration,
-        successStatuses: [200],
-        skipStatuses: [401]
-      });
-    }
+  if (!executeServicesApis) {
+    return;
   }
-}
+
+  const defaultParams = getK6DefaultHttpParams(token);
+
+  const futuredServices = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`,
+    defaultParams
+  );
+  trackRequest({
+    response: futuredServices,
+    checkTitle: "GET featured services",
+    successCounter: featuredServicesSuccess,
+    failureCounter: featuredServicesFailure,
+    durationTrend: featuredServicesDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
+
+  const futuredInstitutions = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`,
+    defaultParams
+  );
+  trackRequest({
+    response: futuredInstitutions,
+    checkTitle: "GET featured institutions",
+    successCounter: featuredInstitutionsSuccess,
+    failureCounter: featuredInstitutionsFailure,
+    durationTrend: featuredInstitutionsDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
+
+  const institutionsFirstPage = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`,
+    defaultParams
+  );
+  trackRequest({
+    response: institutionsFirstPage,
+    checkTitle: "GET institutions page 1",
+    successCounter: institutionsPageOneSuccess,
+    failureCounter: institutionsPageOneFailure,
+    durationTrend: institutionsPageOneDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
+
+  const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 60;
+  if (executeIstitutionsSecondPage) {
+    const institutionsSecondPage = http.get(
+      `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`,
+      defaultParams
+    );
+    trackRequest({
+      response: institutionsSecondPage,
+      checkTitle: "GET institutions page 2",
+      successCounter: institutionsPageTwoSuccess,
+      failureCounter: institutionsPageTwoFailure,
+      durationTrend: institutionsPageTwoDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
+    });
+  }
+
+  const getBonusService = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01K8BG9QEVTHY17EDS79Z3FB29`,
+    defaultParams
+  );
+  trackRequest({
+    response: getBonusService,
+    checkTitle: "GET Bonus Elettrodomestici Service",
+    successCounter: bonusElettrodomesticiServiceSuccess,
+    failureCounter: bonusElettrodomesticiServiceFailure,
+    durationTrend: bonusElettrodomesticiServiceDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
+
+  const getBonusServicePreferences = http.get(
+    `${config.IO_BACKEND_BASE_URL}/api/identity/v1/services/01K8BG9QEVTHY17EDS79Z3FB29/preferences`,
+    defaultParams
+  );
+  trackRequest({
+    response: getBonusServicePreferences,
+    checkTitle: "GET Bonus Elettrodomestici Service preferences",
+    successCounter: bonusElettrodomesticiServicePreferencesSuccess,
+    failureCounter: bonusElettrodomesticiServicePreferencesFailure,
+    durationTrend: bonusElettrodomesticiServicePreferencesDuration,
+    successStatuses: [200],
+    skipStatuses: [401]
+  });
+
+  if (config.ENABLE_SSO_INTROSPECTION) {
+    const getBPDUser = http.get(
+      `${config.AUTH_BACKEND_BASE_URL}/api/sso/bpd/v1/user`,
+      {
+        headers: {
+          Authorization: `Bearer ${await checkAndGetToken(REDIS_CLIENT)(`${key.thumbprint}-bpd-token`)}`,
+          "Content-Type": "application/json",
+        },
+        timeout: "12s",
+        responseType: "text",
+      }
+    );
+    trackRequest({
+      response: getBPDUser,
+      checkTitle: "GET BPD User",
+      successCounter: bpdUserSuccess,
+      failureCounter: bpdUserFailure,
+      durationTrend: bpdUserDuration,
+      successStatuses: [200],
+      skipStatuses: [401]
+    });
+  }
+};

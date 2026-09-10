@@ -7,30 +7,30 @@ import { Trend } from "k6/metrics";
 import http from "k6/http";
 import { IConfig } from "../utils/config";
 import { GeneratedKeypair } from "../utils/lollipop";
+import { getK6DefaultHttpParams } from "../utils/http";
 
 const createSubscriptionDuration = new Trend("post_subscription_duration");
 const getSubscriptionDuration = new Trend("get_subscription_duration");
 
 export const trialSubscription = async ({
   config,
-  key,
-  tokenChecker
+  token
 }: {
   config: IConfig;
   key: GeneratedKeypair;
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+  token: string;
 }) => {
+  const defaultParams = getK6DefaultHttpParams(token, { responseType: "text" });
   // Create a trial subscription
   const createSubscription = http.post(
     `${config.IO_BACKEND_BASE_URL}/api/v1/trials/trialId/subscriptions`,
     {},
     {
+      ...defaultParams,
       headers: {
+        ...defaultParams.headers,
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(key)}`,
-        "Content-Type": "application/json",
       },
-      responseType: "text",
     }
   );
   check(createSubscription, {
@@ -42,13 +42,7 @@ export const trialSubscription = async ({
   // Retrieve users's Trial Subscription
   const getSubscription = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/v1/trials/trialId/subscriptions`,
-    {
-      headers: {
-        Authorization: `Bearer ${await tokenChecker(key)}`,
-        "Content-Type": "application/json",
-      },
-      responseType: "text",
-    }
+    defaultParams
   );
   check(getSubscription, {
     "GET Users's Trial subscription returns 200": (r) => r.status === 200,

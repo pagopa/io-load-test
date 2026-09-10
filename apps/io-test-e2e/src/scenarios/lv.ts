@@ -3,10 +3,6 @@ import { check, fail } from "k6";
 import { pipe } from "fp-ts/lib/function";
 import { GenerateNonceResponse } from "../generated/definitions/fast-login/GenerateNonceResponse";
 import * as E from "fp-ts/Either";
-//@ts-ignore
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
-//@ts-ignore
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
 import { errorsToReadableMessages, readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 
 import { SignerResponseBody } from "../types/signer";
@@ -17,7 +13,7 @@ import { GeneratedKeypair } from "../utils/lollipop";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { trackRequest } from "../utils/metrics";
 import { Client } from "k6/x/redis";
-import { acquireLockOrWait, delKey, releaseLock, setKey } from "../utils/token";
+import { acquireLockOrWait, releaseLock, setKey, setLocalToken } from "../utils/token";
 
 const generateNonceDuration = new Trend("generate_nonce_duration");
 const generateNonceSuccess = new Counter("generate_nonce_success");
@@ -99,9 +95,7 @@ export const lvScenario = async (
     })
   )
 
-  await acquireLockOrWait(REDIS_CLIENT, key.thumbprint);
-  await delKey(REDIS_CLIENT, key.thumbprint)();
-  await delKey(REDIS_CLIENT, `${key.thumbprint}-bpd-token`)();
+  const lockOwner = await acquireLockOrWait(REDIS_CLIENT, key.thumbprint);
 
   // Refresh the session using Lollipop signature
   const refreshSession = http.post(
@@ -141,11 +135,12 @@ export const lvScenario = async (
     })
   );
   if(E.isLeft(errorOrToken)) {
-    await releaseLock(REDIS_CLIENT, key.thumbprint);
+    await releaseLock(REDIS_CLIENT, key.thumbprint, lockOwner);
     fail(errorOrToken.left.message);
   }
   await setKey(REDIS_CLIENT, key.thumbprint, errorOrToken.right)();
-  await releaseLock(REDIS_CLIENT, key.thumbprint);
+  setLocalToken(key.thumbprint, errorOrToken.right);
+  await releaseLock(REDIS_CLIENT, key.thumbprint, lockOwner);
   scenarioDuration.add(duration);
   return errorOrToken.right;
 };

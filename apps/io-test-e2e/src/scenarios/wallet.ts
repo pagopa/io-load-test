@@ -11,39 +11,31 @@ import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import { readableReportSimplified } from "@pagopa/ts-commons/lib/reporters";
 import { GeneratedKeypair } from "../utils/lollipop";
+import { getK6DefaultHttpParams } from "../utils/http";
 
-// Define metrics
 const localUrl = "http://localhost:8001";
 const createWalletInstanceDuration = new Trend("wallet_create_wallet_instance");
 const createWalletAttestationDuration = new Trend(
   "wallet_create_wallet_attestation"
 );
 
-// Function to get nonce
-const getNonce = async (
-  config: IConfig,
-  key: GeneratedKeypair,
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>
-) => {
-  // Perform HTTP GET request for nonce
+const getNonce = (config: IConfig, token: string) => {
+  const defaultParams = getK6DefaultHttpParams(token, { responseType: "text" });
   const response = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/nonce`,
     {
+      ...defaultParams,
       headers: {
+        ...defaultParams.headers,
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(key)}`,
-        "Content-Type": "application/json",
       },
-      responseType: "text",
     }
   );
 
-  // Check for 200 status
   check(response, {
     "(wallet) GET nonce returns 200": (r) => r.status === 200,
   });
 
-  // Decode the nonce using fp-ts Either
   const nonce = pipe(
     response.json(),
     NonceResponse.decode,
@@ -54,7 +46,6 @@ const getNonce = async (
     })
   );
 
-  // Add duration to metric
   createWalletInstanceDuration.add(response.timings.duration);
 
   return nonce;
@@ -65,23 +56,20 @@ const getNonce = async (
  */
 export const walletInstanceCreation = async ({
   config,
-  key,
-  tokenChecker
+  token
 }: {
   config: IConfig;
   key: GeneratedKeypair;
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+  token: string;
 }) => {
-  // Fetch nonce
-  const nonce = await getNonce(config, key, tokenChecker);
+  const defaultParams = getK6DefaultHttpParams(token, { responseType: "text" });
+  const nonce = getNonce(config, token);
 
-  // Create key request
   const createKeyResponse = http.get(`${localUrl}/random-key`, {
     headers: { "Content-Type": "application/json" },
     responseType: "text",
   });
 
-  // Decode created key
   const walletKeyTag = pipe(
     createKeyResponse.json(),
     CreateKeyResponse.decode,
@@ -92,41 +80,34 @@ export const walletInstanceCreation = async ({
     })
   );
 
-  // Wallet instance creation parameters
   const walletInstanceCreationParams = {
     challenge: nonce,
     hardware_key_tag: walletKeyTag,
     key_attestation: "test",
   };
 
-  // Create wallet instance via POST
   const createWalletInstanceResponse = http.post(
     `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
     JSON.stringify(walletInstanceCreationParams),
     {
+      ...defaultParams,
       headers: {
+        ...defaultParams.headers,
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(key)}`,
-        "Content-Type": "application/json",
       },
-      responseType: "text",
     }
   );
 
-  // Check for 204 status
   check(createWalletInstanceResponse, {
     "(wallet) POST wallet-instances returns 204": (r) => r.status === 204,
   });
 
-  // Add duration to metric
   createWalletInstanceDuration.add(
     createWalletInstanceResponse.timings.duration
   );
 
-  // Fetch second nonce
-  const secondNonce = await getNonce(config, key, tokenChecker);
+  const secondNonce = getNonce(config, token);
 
-  // Create wallet attestation request (WAR)
   const createWarResponse = http.post(
     `${localUrl}/wallet-attestation-request`,
     JSON.stringify({ nonce: secondNonce, key_tag: walletKeyTag }),
@@ -136,7 +117,6 @@ export const walletInstanceCreation = async ({
     }
   );
 
-  // Decode WAR
   const createdWar = pipe(
     createWarResponse.json(),
     CreateWalletAttestationResponse.decode,
@@ -147,32 +127,27 @@ export const walletInstanceCreation = async ({
     })
   );
 
-  // Wallet attestation creation parameters
   const walletAttestationCreationParams = {
     grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
     assertion: createdWar,
   };
 
-  // Create wallet attestation
   const createWalletAttestationResponse = http.post(
     `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/token`,
     JSON.stringify(walletAttestationCreationParams),
     {
+      ...defaultParams,
       headers: {
+        ...defaultParams.headers,
         Accept: "*/*",
-        Authorization: `Bearer ${await tokenChecker(key)}`,
-        "Content-Type": "application/json",
       },
-      responseType: "text",
     }
   );
 
-  // Check for 200 status
   check(createWalletAttestationResponse, {
     "(wallet) POST token returns 200": (r) => r.status === 200,
   });
 
-  // Add duration to metric
   createWalletAttestationDuration.add(
     createWalletAttestationResponse.timings.duration
   );

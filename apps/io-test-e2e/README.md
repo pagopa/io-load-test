@@ -28,24 +28,92 @@ The following table lists all configuration environment variables:
 | `SEND_MESSAGES_APIM_BASE_URL`          | APIM base URL used by the fixtures generator to send messages                                                                                                 | string  | `https://api.io.pagopa.it/api/v1`            | If fixtures enabled  |
 | `SEND_MESSAGES_APIM_SUBSCRIPTION_KEYS` | Comma-separated list of APIM subscription keys for the fixtures generator                                                                                     | string  | `<your_api_key>`                             | If fixtures enabled  |
 
-## How to launch the load test
-First, ensure you have installed:
-- **k6**: follow the [k6 installation guide](https://k6.io/docs/get-started/installation/).
-- **Redis**: running and accessible at `REDIS_CONN_STRING`.
-- **Node.js & Yarn**: required to build the bundle and run the background signer.
+## Prerequisites and Setup
+First, ensure you have installed and running:
+- **Node.js**: version `18.13.0` (see `.nvmrc` / `.node-version`). Use `nvm use` or `nodenv` if applicable.
+- **Yarn**: package manager used across the project (`yarn install` inside `apps/io-test-e2e`).
+- **k6**: version `>= 2.2.0` required on system path (follow the [k6 installation guide](https://k6.io/docs/get-started/installation/)).
+- **Redis**: running and accessible at `REDIS_CONN_STRING` (e.g. `redis://localhost:6379`).
+- **pm2**: process manager (will be installed globally automatically by `init.sh` if missing).
 
-Next, run the following command in the `apps/io-test-e2e` directory to launch the load test:
+Clone the repository and install dependencies:
+```bash
+cd apps/io-test-e2e
+yarn install
+cp env.example .env
+# Edit .env with your environment configuration
+```
+
+## How to launch the load test
+The primary command to start the entire testing workflow is the `init.sh` script:
 
 ```bash
 ./init.sh
 ```
 
-`./init.sh` will:
-1. Build the k6 bundle via Webpack (`yarn build`).
-2. Generate initial Lollipop key pairs for test users into `data/keys.json` (if not already present).
-3. Ensure `pm2` is installed and start the background signer service (`signer.config.js`).
-4. Execute k6 via `yarn start`.
-5. Clean up the background processes once the run completes.
+`./init.sh` coordinates all required steps using internal `yarn` commands:
+1. Builds the k6 bundle with Webpack using legacy OpenSSL provider (`yarn build`).
+2. Checks if `data/keys.json` exists:
+   - If missing, generates test Lollipop key pairs and registers them via `yarn data` (`yarn -s data > ./data/keys.json`).
+   - If present, reuses the existing keys.
+3. Checks if `pm2` is installed globally (installs it via `npm install pm2 -g` if missing).
+4. Cleans up existing pm2 processes (`pm2 delete all`).
+5. Starts the background HTTP signer service in cluster mode with pm2 (`pm2 start signer.config.js`), which triggers `yarn signer`.
+6. Waits 5 seconds for the signer service to become ready.
+7. Executes the k6 load test run (`yarn start`).
+8. Automatically kills the background signer service and cleans up child processes when k6 finishes.
+
+### Lollipop Key Generation & Lifecycle (`data/keys.json`)
+> **Important:** The key generation script (`yarn data`) creates and registers Lollipop key pairs on the target backend for the Fiscal Codes specified in `TEST_FISCAL_CODE`.
+>
+> - `init.sh` will **only** generate `data/keys.json` if the file does not already exist.
+> - **Must delete `data/keys.json` before a new test session** if:
+>   - The previously generated keys are old or expired.
+>   - Other developers ran test sessions using the same test Fiscal Codes, which overrides the registered public keys on the backend.
+>   - You modified the `TEST_FISCAL_CODE` list in `.env`.
+>
+> To force key regeneration:
+> ```bash
+> rm -f ./data/keys.json
+> ./init.sh
+> ```
+> Or manually:
+> ```bash
+> rm -f ./data/keys.json
+> yarn data
+> ```
+
+### Redis Token Cache Cleanup
+Stored session tokens in Redis must be deleted before each load test session to prevent `401 Unauthorized` errors caused by expired or invalid tokens from previous runs.
+
+Run the `FLUSHALL` command using `redis-cli`:
+```bash
+redis-cli FLUSHALL
+```
+or connect to `redis-cli` and execute:
+```text
+127.0.0.1:6379> FLUSHALL
+```
+
+## Available npm/yarn scripts
+
+All scripts are executed inside `apps/io-test-e2e`:
+
+| Command | Description |
+| ------- | ----------- |
+| `yarn start` | Runs the compiled k6 bundle (`dist/index.js`) using `dotenv-cli` with `--http-debug="full"`. |
+| `yarn build` | Builds the k6 bundle using Webpack with `NODE_OPTIONS=--openssl-legacy-provider` in production mode. |
+| `yarn data` | Runs `src/generator/keys.ts` with `ts-node` and outputs generated test user Lollipop key pairs in JSON format to stdout (used as `yarn -s data > ./data/keys.json`). |
+| `yarn signer` | Starts the Express HTTP signing service (`src/generator/signer.ts`) with `ts-node`. Provides endpoints for lollipop HTTP signatures, random JWK keys, and wallet attestation requests. |
+| `yarn fixtures` | Seeds test data (e.g. messages and profiles) using `src/generator/fixtures.ts` via APIM when `FIXTURES_ENABLED=true`. |
+| `yarn generate` | Runs all OpenAPI code generation tasks (`npm-run-all generate:*`) into `src/generated/definitions/`. |
+| `yarn generate:messages` | Generates TypeScript definitions and models for IO communication/messages from the `io-backend` OpenAPI spec. |
+| `yarn generate:identity` | Generates TypeScript client and definitions for IO identity APIs from `io-backend`. |
+| `yarn generate:fast-login` | Generates TypeScript definitions for `io-functions-fast-login`. |
+| `yarn generate:login` | Generates TypeScript client and definitions for login using local `./api/testlogin.yaml`. |
+| `yarn generate:lollipop` | Generates TypeScript client and definitions for `io-functions-lollipop`. |
+| `yarn generate:services` | Generates TypeScript client and definitions for `io-functions-services`. |
+| `yarn generate:session-manager` | Generates TypeScript client and definitions for `io-session-manager` from `io-auth-n-identity-domain`. |
 
 ## Scenarios
 This tool can handle different test scenarios through the `SCENARIOS` environment variable:

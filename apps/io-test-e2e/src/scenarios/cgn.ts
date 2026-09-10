@@ -26,7 +26,7 @@ export const loadingCgnDataPortfolioTab = async ({
     "GET",
     `${config.IO_BACKEND_BASE_URL}/api/cgn-card/v1/status`,
     null,
-    getK6DefaultHttpParams(token)
+    getK6DefaultHttpParams(token, { additionalExpectedStatuses: [404] })
   );
   trackRequest({
     response: getCgnStatus as RefinedResponse<"text">,

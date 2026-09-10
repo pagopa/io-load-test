@@ -56,15 +56,10 @@ export const options = {
       gracefulStop: "1m",
     },
   },
-  thresholds: {
-    // Arrival-rate executors can drop a handful of iterations while
-    // allocating VUs or during graceful stop. Fail only on a real stall.
-    dropped_iterations: [`count<${config.maxVUs * 2}`],
-  },
 };
 
 http.setResponseCallback(
-  http.expectedStatuses({ min: 200, max: 399 }, 401, 404)
+  http.expectedStatuses({ min: 200, max: 399 })
 );
 
 const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);

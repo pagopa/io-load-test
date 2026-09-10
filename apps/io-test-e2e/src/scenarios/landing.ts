@@ -126,7 +126,9 @@ export const appOpening = async ({
     requests.push({
       method: "GET",
       url: `${config.IO_BACKEND_BASE_URL}/api/identity/v1/user-data-processing/DELETE`,
-      params: authParams,
+      params: getK6DefaultHttpParams(token, {
+        additionalExpectedStatuses: [404],
+      }),
     });
   }
 
@@ -141,14 +143,18 @@ export const appOpening = async ({
     requests.push({
       method: "GET",
       url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/current/status`,
-      params: authParams,
+        params: getK6DefaultHttpParams(token, {
+          additionalExpectedStatuses: [404],
+        }),
     });
     if (executeWalletInstanceStatusWithId) {
       index.walletStatusWithId = requests.length;
       requests.push({
         method: "GET",
         url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/${key.fiscalCode}/status`,
-        params: authParams,
+        params: getK6DefaultHttpParams(token, {
+          additionalExpectedStatuses: [404],
+        }),
       });
     }
   }

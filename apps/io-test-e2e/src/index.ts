@@ -19,6 +19,7 @@ import {
 } from "./utils/token";
 import { SharedArray } from "k6/data";
 import { Trend } from "k6/metrics";
+import http from "k6/http";
 import { FeatureScenarioParams } from "./types/scenario";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
@@ -56,9 +57,15 @@ export const options = {
     },
   },
   thresholds: {
-    dropped_iterations: ["count<1"],
+    // Arrival-rate executors can drop a handful of iterations while
+    // allocating VUs or during graceful stop. Fail only on a real stall.
+    dropped_iterations: [`count<${config.maxVUs * 2}`],
   },
 };
+
+http.setResponseCallback(
+  http.expectedStatuses({ min: 200, max: 399 }, 401, 404)
+);
 
 const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
 const tokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);

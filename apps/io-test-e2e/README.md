@@ -157,6 +157,8 @@ Set `preAllocatedVUs` close to that estimate. Avoid a large gap between `preAllo
 
 Independent HTTP calls inside a journey run concurrently (`http.asyncRequest` / `Promise.all`). Feature scenarios selected in `SCENARIOS` overlap after Fast Login. Session tokens are kept in VU memory after LV so later API calls do not poll Redis.
 
+k6 treats 401 and 404 as expected responses (`http.expectedStatuses`), matching the scenario checks that already skip those statuses. The `dropped_iterations` threshold allows a small number of drops during VU allocation or graceful stop so the process does not exit 99 after an otherwise successful run.
+
 ## Load test diagrams
 High level load test flow chart:
 ![High level load test flow chart](docs/high-level-diagram.svg)

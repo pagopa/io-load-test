@@ -7,8 +7,6 @@ import { GeneratedKeypair } from "./utils/lollipop";
 import { lvScenario } from "./scenarios/lv";
 import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
-import * as TE from "fp-ts/TaskEither";
-import * as AR from "fp-ts/Array";
 import { getFeatureScenario } from "./scenarios/mapping";
 import { getRedisClient } from "./utils/redis";
 import {
@@ -16,94 +14,121 @@ import {
   keysInitializer,
   popListKeyAsJson,
   pushListKey,
+  REDIS_KEYS_LIST,
+  setLocalToken,
 } from "./utils/token";
 import { SharedArray } from "k6/data";
-import { identity } from "fp-ts/lib/function";
+import { Trend } from "k6/metrics";
+import http from "k6/http";
+import { FeatureScenarioParams } from "./types/scenario";
 
 const keys: ReadonlyArray<GeneratedKeypair> = new SharedArray(
   "keys",
   function() {
-    // here you can open files, and then do additional processing or generate the array with data dynamically
     const f = JSON.parse(open("../data/keys.json"));
-    return f; // f must be an array[]
+    return f;
   }
 );
 
 const config = getConfigOrThrow(__ENV);
+const iterationWallDuration = new Trend("iteration_wall_duration");
 
 export const options = {
+  discardResponseBodies: true,
+  batch: 20,
+  batchPerHost: 20,
   scenarios: {
     contacts: {
       executor: "ramping-arrival-rate",
-
       startRate: 1,
-
       stages: [
-        {target: 10, duration: "2m"},{target: 10, duration: "1m"},
-        {target: 100, duration: "2m"}, {target: 100, duration: "15m"},
-        //{target: 10, duration: "1m"}, {target: 10, duration: "1m"},
-        //{target: 50, duration: "2m"}, {target: 50, duration: "3m"},
-        //{target: 5000, duration: "10m"}, {target: 5000, duration: "2m"},
+        { target: 10, duration: "2m" },
+        { target: 10, duration: "1m" },
+        { target: 100, duration: "2m" },
+        { target: 100, duration: "15m" },
+        //{ target: 10, duration: "1m" }, { target: 10, duration: "1m" },
+        //{ target: 50, duration: "2m" }, { target: 50, duration: "3m" },
+        //{ target: 5000, duration: "10m" }, { target: 5000, duration: "2m" },
       ],
-
       maxVUs: config.maxVUs,
-
-      // Start `rate` iterations per second
       timeUnit: "1s",
-
-      // Pre-allocate VUs (concurrent users)
       preAllocatedVUs: config.preAllocatedVUs,
-      gracefulStop: "1m"
+      gracefulStop: "1m",
     },
   },
 };
 
-const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
+http.setResponseCallback(
+  http.expectedStatuses({ min: 200, max: 399 })
+);
 
-export const newTokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);
-const queueInitializer = keysInitializer(REDIS_CLIENT);
+const REDIS_CLIENT = getRedisClient(config.REDIS_CONN_STRING);
+const tokenChecker = getSessionTokenOrRefresh(REDIS_CLIENT, config);
+
+export async function setup() {
+  const result = await keysInitializer(REDIS_CLIENT)(REDIS_KEYS_LIST, keys)();
+  if (E.isLeft(result)) {
+    throw result.left;
+  }
+}
+
+const runFeatureScenarios = async (params: FeatureScenarioParams) => {
+  const scenarios = pipe(
+    config,
+    FeatureScenarioEnabledType.decode,
+    E.map((featureScenarioConfig) =>
+      featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
+    ),
+    E.getOrElseW(() => [] as ReturnType<typeof getFeatureScenario>[])
+  );
+  await Promise.all(scenarios.map((fn) => fn(params)));
+};
 
 export default async function() {
-  await pipe(
-    queueInitializer("keys", keys),
-    TE.chain(() => popListKeyAsJson(REDIS_CLIENT, "keys")),
-    TE.map((generatedKeyPair) => generatedKeyPair as GeneratedKeypair),
-    TE.chain((key) =>
-      pipe(
-        config.ENABLE_LV_SCENERY,
-        TE.fromPredicate(identity, () => false),
-        TE.chainW(() =>
-          TE.tryCatch(() => lvScenario(config, REDIS_CLIENT, key), () => new Error("Error executing lvScenario")),
-        ),
-        TE.chainW(() =>
-          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-        ),
-        TE.orElseW(() =>
-          pushListKey(REDIS_CLIENT, "keys", JSON.stringify(key))
-        ),
-        TE.chain(() =>
-          pipe(
-            config,
-            FeatureScenarioEnabledType.decode,
-            E.map((featureScenarioConfig) =>
-              featureScenarioConfig.SCENARIOS.map(getFeatureScenario)
-            ),
-            E.getOrElseW(() => []),
-            (scenarios) =>
-              scenarios.map((fn) =>
-                TE.tryCatch(
-                  async () => fn({ config, REDIS_CLIENT, key, tokenChecker:newTokenChecker }),
-                  E.toError
-                )
-              ),
-            AR.sequence(TE.ApplicativeSeq)
-          )
-        )
-      )
-    ),
-    TE.mapLeft(e => console.error(`Abort execution|DETAIL => ${JSON.stringify(e)} | ${e.stack} | ${e.message}`)),
-    TE.toUnion
-  )();
+  const startedAt = Date.now();
+  let leasedKey: GeneratedKeypair | undefined;
+  try {
+    const popped = await popListKeyAsJson(REDIS_CLIENT, REDIS_KEYS_LIST)();
+    if (E.isLeft(popped)) {
+      throw popped.left;
+    }
+    leasedKey = popped.right as GeneratedKeypair;
+
+    const token = config.ENABLE_LV_SCENERY
+      ? await lvScenario(config, REDIS_CLIENT, leasedKey)
+      : await tokenChecker(leasedKey);
+    setLocalToken(leasedKey.thumbprint, token);
+
+    await runFeatureScenarios({
+      config,
+      REDIS_CLIENT,
+      key: leasedKey,
+      token,
+    });
+  } catch (e) {
+    const err = e as Error;
+    console.error(
+      `Abort execution|DETAIL => ${JSON.stringify(err)} | ${err && err.stack} | ${
+        err && err.message
+      }`
+    );
+  } finally {
+    if (leasedKey) {
+      const pushed = await pushListKey(
+        REDIS_CLIENT,
+        REDIS_KEYS_LIST,
+        JSON.stringify(leasedKey)
+      )();
+      if (E.isLeft(pushed)) {
+        console.error(
+          `Failed to return key to Redis queue|DETAIL => ${JSON.stringify(
+            pushed.left
+          )}`
+        );
+      }
+    }
+    iterationWallDuration.add(Date.now() - startedAt);
+  }
 }
 
 export function handleSummary(data: unknown) {

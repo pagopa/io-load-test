@@ -1,7 +1,3 @@
-//@ts-ignore
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
-//@ts-ignore
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.4/index.js";
 import { check } from "k6";
 import { Trend } from "k6/metrics";
 import http from "k6/http";
@@ -19,29 +15,25 @@ const messageDetailDuration = new Trend("get_message_detail_duration");
 
 export const messageListAndDetail = async ({
   config,
-  key,
-  tokenChecker
+  token
 }: {
   config: IConfig;
   key: GeneratedKeypair;
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+  token: string;
 }) => {
-  // Retrieve users's messages
+  const defaultParams = getK6DefaultHttpParams(token, { responseType: "text" });
   const getFirstPageMessages = http.get(
     `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?page_size=10&enrich_result_data=true`,
-    {
-      ...(await getK6DefaultHttpParams(key, tokenChecker))
-    }
+    defaultParams
   );
   check(getFirstPageMessages, {
     "GET Users's first page messages returns 200": (r) => r.status === 200,
   });
   messagesDuration.add(getFirstPageMessages.timings.duration);
 
-  // Fetch next messages page if present and fetch a message detail
   await pipe(
     getResponseBodyAsType(
-      getFirstPageMessages.body,
+      String(getFirstPageMessages.body || ""),
       PaginatedPublicMessagesCollection
     ),
     TE.fromEither,
@@ -50,53 +42,38 @@ export const messageListAndDetail = async ({
         firstPageResponse.next,
         E.fromNullable(Error("Second page not present")),
         TE.fromEither,
-        TE.bindTo("minimumId"),
-        TE.bind("token2ndPage", () =>
-          TE.tryCatch(() => tokenChecker(key), E.toError)
-        ),
-        TE.map(({ minimumId, token2ndPage }) => {
-            const getSecondPageMessages = http.get(
-              `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?page_size=10&enrich_result_data=true&minimum_id=${minimumId}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${token2ndPage}`,
-                  "Content-Type": "application/json",
-                },
-                responseType: "text",
-              }
-            );
-            check(getSecondPageMessages, {
-              "GET Users's second page messages returns 200": (r) =>
-                r.status === 200,
-            });
-            messagesDuration.add(getSecondPageMessages.timings.duration);
+        TE.map((minimumId) => {
+          const getSecondPageMessages = http.get(
+            `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages?page_size=10&enrich_result_data=true&minimum_id=${minimumId}`,
+            defaultParams
+          );
+          check(getSecondPageMessages, {
+            "GET Users's second page messages returns 200": (r) =>
+              r.status === 200,
+          });
+          messagesDuration.add(getSecondPageMessages.timings.duration);
 
-            return getResponseBodyAsType(
-              getSecondPageMessages.body,
-              PaginatedPublicMessagesCollection
-            );
-          }
-        ),
+          return getResponseBodyAsType(
+            String(getSecondPageMessages.body || ""),
+            PaginatedPublicMessagesCollection
+          );
+        }),
         TE.chain(TE.fromEither),
         TE.map((res) => res.items[0]),
         TE.orElse(() => TE.of(firstPageResponse.items[0]))
       )
     ),
-    TE.map((msg) => msg.id),
-    TE.bindTo("messageId"),
-    TE.bind("tokenGetDetail", () =>
-      TE.tryCatch(() => tokenChecker(key), E.toError)
+    TE.chain((msg) =>
+      pipe(
+        msg,
+        E.fromNullable(new Error("No messages available")),
+        TE.fromEither
+      )
     ),
-    TE.map(({ messageId, tokenGetDetail }) =>{
+    TE.map((msg) => {
       const getMessageDetail = http.get(
-        `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages/${messageId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${tokenGetDetail}`,
-            "Content-Type": "application/json",
-          },
-          responseType: "text",
-        }
+        `${config.IO_BACKEND_BASE_URL}/api/communication/v1/messages/${msg.id}`,
+        defaultParams
       );
       check(getMessageDetail, {
         "GET Users's message detail returns 200": (r) => r.status === 200,

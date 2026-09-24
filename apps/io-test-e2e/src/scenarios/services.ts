@@ -1,4 +1,4 @@
-import http from "k6/http";
+import http, { RefinedResponse } from "k6/http";
 import { IConfig } from "../utils/config";
 // @ts-ignore
 import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
@@ -52,210 +52,176 @@ const bonusElettrodomesticiServiceSuccess = new Counter(
 const bonusElettrodomesticiServiceFailure = new Counter(
   "get_bonus_elettrodomestici_service_failure"
 );
+const servicesWallDuration = new Trend("services_scenario_duration");
 
 /* Function to handle user landing on the services section.
  */
 export const loadingOnlyServicesAppTab = async ({
   config,
-  key,
-  tokenChecker
+  token
 }: {
   config: IConfig;
   key: GeneratedKeypair;
-  tokenChecker: (key: GeneratedKeypair) => Promise<string>;
+  token: string;
 }) => {
   // Base rate of executing this flow is 9.2k req/h
   // Use SERVICES_BASE_RATE_PERCENTAGE env to control the execution rate of this flow
   // in combination with other flows during load testing.
   const executeServicesApis = randomIntBetween(1, 100);
-  if (executeServicesApis <= config.SERVICES_BASE_RATE_PERCENTAGE) {
-    console.debug(`executeServicesApis`);
+  if (executeServicesApis > config.SERVICES_BASE_RATE_PERCENTAGE) {
+    return;
+  }
 
-    // Obtain default HTTP parameters once since the initial three requests
-    // are executed concurrently via http.batch immediately after obtaining the parameters.
-    const defaultParams = await getK6DefaultHttpParams(key, tokenChecker);
+  const scenarioStartedAt = Date.now();
+  const defaultParams = getK6DefaultHttpParams(token);
+  const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 47;
+  const executeIstitutionsThirdPage = randomIntBetween(1, 100) < 32;
 
-    // Concurrent execution via http.batch for initial landing requests:
-    // - Featured services (Peak 9.2k req/h)
-    // - Featured institutions (Peak 9.2k req/h)
-    // - List institutions page 1 (Peak 9.2k req/h)
-    const [futuredServices, futuredInstitutions, institutionsFirstPage] =
-      http.batch([
-        // Get featured services
-        // Peak 9.2k req/h
-        {
-          method: "GET",
-          url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`,
-          params: defaultParams,
-        },
-        // Get featured institutions
-        // Peak 9.2k req/h
-        {
-          method: "GET",
-          url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`,
-          params: defaultParams,
-        },
-        // List institutions page 1
-        // Peak 9.2k req/h
-        {
-          method: "GET",
-          url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`,
-          params: defaultParams,
-        },
-      ]);
+  const landingRequests = [
+    {
+      method: "GET" as const,
+      url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/featured`,
+      params: defaultParams,
+    },
+    {
+      method: "GET" as const,
+      url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions/featured`,
+      params: defaultParams,
+    },
+    {
+      method: "GET" as const,
+      url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=0`,
+      params: defaultParams,
+    },
+  ];
 
-    trackRequest({
-      response: futuredServices,
-      checkTitle: "GET featured services",
-      successCounter: featuredServicesSuccess,
-      failureCounter: featuredServicesFailure,
-      durationTrend: featuredServicesDuration,
-      successStatuses: [200],
-      skipStatuses: [401],
-    });
-
-    trackRequest({
-      response: futuredInstitutions,
-      checkTitle: "GET featured institutions",
-      successCounter: featuredInstitutionsSuccess,
-      failureCounter: featuredInstitutionsFailure,
-      durationTrend: featuredInstitutionsDuration,
-      successStatuses: [200],
-      skipStatuses: [401],
-    });
-
-    trackRequest({
-      response: institutionsFirstPage,
-      checkTitle: "GET institutions page 1",
-      successCounter: institutionsPageOneSuccess,
-      failureCounter: institutionsPageOneFailure,
-      durationTrend: institutionsPageOneDuration,
-      successStatuses: [200],
-      skipStatuses: [401],
-    });
-
-    // List institutions page 2
-    // Peak 4.4k req/h
-    const executeIstitutionsSecondPage = randomIntBetween(1, 100) < 47;
-    if (executeIstitutionsSecondPage) {
-      const institutionsSecondPage = http.get(
-        `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`,
-        {
-          ...(await getK6DefaultHttpParams(key, tokenChecker)),
-        }
-      );
-      trackRequest({
-        response: institutionsSecondPage,
-        checkTitle: "GET institutions page 2",
-        successCounter: institutionsPageTwoSuccess,
-        failureCounter: institutionsPageTwoFailure,
-        durationTrend: institutionsPageTwoDuration,
-        successStatuses: [200],
-        skipStatuses: [401],
-      });
-    }
-
-    // List institutions page 3
-    // Peak 3k req/h
-    const executeIstitutionsThirdPage = randomIntBetween(1, 100) < 32;
-    if (executeIstitutionsThirdPage) {
-      const institutionsThirdPage = http.get(
-        `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=20`,
-        {
-          ...(await getK6DefaultHttpParams(key, tokenChecker)),
-        }
-      );
-      trackRequest({
-        response: institutionsThirdPage,
-        checkTitle: "GET institutions page 3",
-        successCounter: institutionsPageThreeSuccess,
-        failureCounter: institutionsPageThreeFailure,
-        durationTrend: institutionsPageThreeDuration,
-        successStatuses: [200],
-        skipStatuses: [401],
-      });
-    }
-
-    // Retrieve services detail in parallel via http.batch (10 requests) to reach
-    // a 10x ratio over the base APIs for a comulative rate of 96k req/h.
-    // A set of service IDs is used to avoid overloading
-    // the database with a single key and causing hot partitioning.
-    // Request counts are proportioned according to real traffic rates:
-    // - 01EWZ58ZJ3FM3PTPYV6VTGG47S (29k req/h): 5 requests (50%)
-    // - 01HD63674XJ1R6XCNHH24PCRR2 (16k req/h): 2 requests (20%)
-    // - 01DBJNW5NR2M2VQTM7VG0SGNNZ (12k req/h): 2 requests (20%)
-    // - 01G40DWQGKY5GRWSNM4303VNRP (4k req/h):  1 request  (10%)
-    const serviceBatchParams = await getK6DefaultHttpParams(key, tokenChecker);
-
-    const serviceRequests = [
-      // 01EWZ58ZJ3FM3PTPYV6VTGG47S - 29k req/h (5 requests)
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01EWZ58ZJ3FM3PTPYV6VTGG47S`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01EWZ58ZJ3FM3PTPYV6VTGG47S`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01EWZ58ZJ3FM3PTPYV6VTGG47S`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01EWZ58ZJ3FM3PTPYV6VTGG47S`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01EWZ58ZJ3FM3PTPYV6VTGG47S`,
-        params: serviceBatchParams,
-      },
-      // 01HD63674XJ1R6XCNHH24PCRR2 - 16k req/h (2 requests)
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01HD63674XJ1R6XCNHH24PCRR2`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01HD63674XJ1R6XCNHH24PCRR2`,
-        params: serviceBatchParams,
-      },
-      // 01DBJNW5NR2M2VQTM7VG0SGNNZ - 12k req/h (2 requests)
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01DBJNW5NR2M2VQTM7VG0SGNNZ`,
-        params: serviceBatchParams,
-      },
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01DBJNW5NR2M2VQTM7VG0SGNNZ`,
-        params: serviceBatchParams,
-      },
-      // 01G40DWQGKY5GRWSNM4303VNRP - 4k req/h (1 request)
-      {
-        method: "GET" as const,
-        url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/01G40DWQGKY5GRWSNM4303VNRP`,
-        params: serviceBatchParams,
-      },
-    ];
-
-    const bonusServicesResponses = http.batch(serviceRequests);
-
-    bonusServicesResponses.forEach((res) => {
-      trackRequest({
-        response: res,
-        checkTitle: "GET Service",
-        successCounter: bonusElettrodomesticiServiceSuccess,
-        failureCounter: bonusElettrodomesticiServiceFailure,
-        durationTrend: bonusElettrodomesticiServiceDuration,
-        successStatuses: [200],
-        skipStatuses: [401],
-      });
+  if (executeIstitutionsSecondPage) {
+    landingRequests.push({
+      method: "GET" as const,
+      url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=10`,
+      params: defaultParams,
     });
   }
+
+  if (executeIstitutionsThirdPage) {
+    landingRequests.push({
+      method: "GET" as const,
+      url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/institutions?scope=NATIONAL&limit=10&offset=20`,
+      params: defaultParams,
+    });
+  }
+
+  const landingResponses = await Promise.all(
+    landingRequests.map((request) =>
+      http.asyncRequest(request.method, request.url, null, request.params)
+    )
+  );
+
+  const [
+    futuredServices,
+    futuredInstitutions,
+    institutionsFirstPage,
+    ...optionalPages
+  ] = landingResponses;
+
+  trackRequest({
+    response: futuredServices as RefinedResponse<"text">,
+    checkTitle: "GET featured services",
+    successCounter: featuredServicesSuccess,
+    failureCounter: featuredServicesFailure,
+    durationTrend: featuredServicesDuration,
+    successStatuses: [200],
+    skipStatuses: [401],
+  });
+
+  trackRequest({
+    response: futuredInstitutions as RefinedResponse<"text">,
+    checkTitle: "GET featured institutions",
+    successCounter: featuredInstitutionsSuccess,
+    failureCounter: featuredInstitutionsFailure,
+    durationTrend: featuredInstitutionsDuration,
+    successStatuses: [200],
+    skipStatuses: [401],
+  });
+
+  trackRequest({
+    response: institutionsFirstPage as RefinedResponse<"text">,
+    checkTitle: "GET institutions page 1",
+    successCounter: institutionsPageOneSuccess,
+    failureCounter: institutionsPageOneFailure,
+    durationTrend: institutionsPageOneDuration,
+    successStatuses: [200],
+    skipStatuses: [401],
+  });
+
+  let optionalIndex = 0;
+  if (executeIstitutionsSecondPage) {
+    trackRequest({
+      response: optionalPages[optionalIndex] as RefinedResponse<"text">,
+      checkTitle: "GET institutions page 2",
+      successCounter: institutionsPageTwoSuccess,
+      failureCounter: institutionsPageTwoFailure,
+      durationTrend: institutionsPageTwoDuration,
+      successStatuses: [200],
+      skipStatuses: [401],
+    });
+    optionalIndex += 1;
+  }
+
+  if (executeIstitutionsThirdPage) {
+    trackRequest({
+      response: optionalPages[optionalIndex] as RefinedResponse<"text">,
+      checkTitle: "GET institutions page 3",
+      successCounter: institutionsPageThreeSuccess,
+      failureCounter: institutionsPageThreeFailure,
+      durationTrend: institutionsPageThreeDuration,
+      successStatuses: [200],
+      skipStatuses: [401],
+    });
+  }
+
+  // Retrieve services detail in parallel via http.batch (10 requests) to reach
+  // a 10x ratio over the base APIs for a comulative rate of 96k req/h.
+  // A set of service IDs is used to avoid overloading
+  // the database with a single key and causing hot partitioning.
+  // Request counts are proportioned according to real traffic rates:
+  // - 01EWZ58ZJ3FM3PTPYV6VTGG47S (29k req/h): 5 requests (50%)
+  // - 01HD63674XJ1R6XCNHH24PCRR2 (16k req/h): 2 requests (20%)
+  // - 01DBJNW5NR2M2VQTM7VG0SGNNZ (12k req/h): 2 requests (20%)
+  // - 01G40DWQGKY5GRWSNM4303VNRP (4k req/h):  1 request  (10%)
+  const serviceRequests = [
+    "01EWZ58ZJ3FM3PTPYV6VTGG47S",
+    "01EWZ58ZJ3FM3PTPYV6VTGG47S",
+    "01EWZ58ZJ3FM3PTPYV6VTGG47S",
+    "01EWZ58ZJ3FM3PTPYV6VTGG47S",
+    "01EWZ58ZJ3FM3PTPYV6VTGG47S",
+    "01HD63674XJ1R6XCNHH24PCRR2",
+    "01HD63674XJ1R6XCNHH24PCRR2",
+    "01DBJNW5NR2M2VQTM7VG0SGNNZ",
+    "01DBJNW5NR2M2VQTM7VG0SGNNZ",
+    "01G40DWQGKY5GRWSNM4303VNRP",
+  ].map((serviceId) => ({
+    method: "GET" as const,
+    url: `${config.IO_BACKEND_BASE_URL}/api/catalog/v1/services/${serviceId}`,
+    params: defaultParams,
+  }));
+
+  const bonusServicesResponses = await Promise.all(
+    serviceRequests.map((request) =>
+      http.asyncRequest(request.method, request.url, null, request.params)
+    )
+  );
+
+  bonusServicesResponses.forEach((res) => {
+    trackRequest({
+      response: res as RefinedResponse<"text">,
+      checkTitle: "GET Service",
+      successCounter: bonusElettrodomesticiServiceSuccess,
+      failureCounter: bonusElettrodomesticiServiceFailure,
+      durationTrend: bonusElettrodomesticiServiceDuration,
+      successStatuses: [200],
+      skipStatuses: [401],
+    });
+  });
+  servicesWallDuration.add(Date.now() - scenarioStartedAt);
 };

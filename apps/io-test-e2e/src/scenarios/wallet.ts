@@ -1,7 +1,6 @@
 import { Counter, Trend } from "k6/metrics";
 import http, { RefinedResponse, ResponseType } from "k6/http";
 import * as t from "io-ts";
-import { pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/Either";
 import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
@@ -17,20 +16,45 @@ const localUrl = "http://localhost:8001";
 const getNonceDuration = new Trend("wallet_get_nonce_duration");
 const getNonceSuccess = new Counter("wallet_get_nonce_success");
 const getNonceFailure = new Counter("wallet_get_nonce_failure");
-const createInstanceDuration = new Trend("wallet_create_instance_duration");
-const createInstanceSuccess = new Counter(
+const documentsOnIOInstanceCreationDuration = new Trend(
+  "wallet_create_instance_duration"
+);
+const documentsOnIOInstanceCreationSuccess = new Counter(
   "wallet_create_instance_success"
 );
-const createInstanceFailure = new Counter("wallet_create_instance_failure");
-const attestationTokenDuration = new Trend(
+const documentsOnIOInstanceCreationFailure = new Counter(
+  "wallet_create_instance_failure"
+);
+const documentsOnIOAttestationTokenDuration = new Trend(
   "wallet_attestation_token_duration"
 );
-const attestationTokenSuccess = new Counter(
+const documentsOnIOAttestationTokenSuccess = new Counter(
   "wallet_attestation_token_success"
 );
-const attestationTokenFailure = new Counter(
+const documentsOnIOAttestationTokenFailure = new Counter(
   "wallet_attestation_token_failure"
 );
+const whitelistDuration = new Trend("wallet_whitelist_duration");
+const whitelistSuccess = new Counter("wallet_whitelist_success");
+const whitelistFailure = new Counter("wallet_whitelist_failure");
+const currentStatusDuration = new Trend("wallet_current_status_duration");
+const currentStatusSuccess = new Counter("wallet_current_status_success");
+const currentStatusFailure = new Counter("wallet_current_status_failure");
+const statusWithIdDuration = new Trend("wallet_status_with_id_duration");
+const statusWithIdSuccess = new Counter("wallet_status_with_id_success");
+const statusWithIdFailure = new Counter("wallet_status_with_id_failure");
+const itWalletInstanceAttestationDuration = new Trend(
+  "wallet_instance_attestation_duration"
+);
+const itWalletInstanceAttestationSuccess = new Counter(
+  "wallet_instance_attestation_success"
+);
+const itWalletInstanceAttestationFailure = new Counter(
+  "wallet_instance_attestation_failure"
+);
+const itWalletKeyAttestationDuration = new Trend("wallet_key_attestation_duration");
+const itWalletKeyAttestationSuccess = new Counter("wallet_key_attestation_success");
+const itWalletKeyAttestationFailure = new Counter("wallet_key_attestation_failure");
 
 type BatchRequest = {
   method: "GET" | "POST";
@@ -39,263 +63,395 @@ type BatchRequest = {
   params: ReturnType<typeof getK6DefaultHttpParams>;
 };
 
-/* Decode a JSON response body into the given codec. */
+type NonceName =
+  | "documentsOnIOInstanceCreation"
+  | "documentsOnIOAttestation"
+  | "itWalletInstanceAttestation"
+  | "itWalletKeyAttestation";
+type FlowRequestKind =
+  | "documentsOnIOInstanceCreation"
+  | "documentsOnIOAttestationRequest"
+  | "itWalletInstanceAttestationRequest"
+  | "itWalletKeyAttestationRequest";
+type AttestationRequestKind =
+  | "documentsOnIOAttestation"
+  | "itWalletInstanceAttestation"
+  | "itWalletKeyAttestation";
+
 const decodeBody = <A, S>(body: string, codec: t.Type<A, S>) =>
   getResponseBodyAsType(body, codec);
 
-/* Function to handle wallet instance creation and attestation.
- * Warning: This works only with fiscal codes that start with LVTEST00A00.
- * The flow is parallelized in batches: nonces and key generation run first,
- * instance creation and attestation request next, then the token exchange.
- */
+const decodeNonce = (
+  response: RefinedResponse<ResponseType>
+): string | undefined => {
+  if (response.status !== 200) {
+    return undefined;
+  }
+  const result = decodeBody(String(response.body || ""), NonceResponse);
+  return E.isRight(result) ? result.right.nonce : undefined;
+};
+
+const decodeKeyTag = (
+  response: RefinedResponse<ResponseType>
+): string | undefined => {
+  if (response.status !== 200) {
+    return undefined;
+  }
+  const result = decodeBody(String(response.body || ""), CreateKeyResponse);
+  return E.isRight(result) ? result.right.kid : undefined;
+};
+
+const decodeAttestation = (
+  response: RefinedResponse<ResponseType>
+): string | undefined => {
+  if (response.status !== 200) {
+    return undefined;
+  }
+  const result = decodeBody(
+    String(response.body || ""),
+    CreateWalletAttestationResponse
+  );
+  return E.isRight(result) ? result.right.wallet_attestation_request : undefined;
+};
+
+const shouldExecute = (percentage: number): boolean =>
+  Math.random() * 100 < percentage;
+
 export const walletInstanceCreation = async ({
   config,
+  key,
   token,
 }: FeatureScenarioParams) => {
   const authTextParams = getK6DefaultHttpParams(token, { responseType: "text" });
-  const signerTextParams = getK6DefaultHttpParams(token, { responseType: "text" });
+  const statusParams = getK6DefaultHttpParams(token, {
+    responseType: "text",
+    additionalExpectedStatuses: [404],
+  });
+  const signerParams = {
+    headers: {},
+    responseType: "text" as const,
+    timeout: "5s",
+  };
+  const signerJsonParams = {
+    ...signerParams,
+    headers: { "Content-Type": "application/json" },
+  };
 
-  // Batch 1: all independent requests (nonces + signer local key).
-  const batch1: BatchRequest[] = [
+  const landingRequests: BatchRequest[] = [
     {
       method: "GET",
-      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/nonce`,
+      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/whitelisted-fiscal-code`,
       params: authTextParams,
     },
     {
       method: "GET",
-      url: `${localUrl}/random-key`,
-      params: { ...signerTextParams, headers: {} },
+      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/current/status`,
+      params: statusParams,
     },
     {
       method: "GET",
-      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/nonce`,
-      params: authTextParams,
+      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances/${key.fiscalCode}/status`,
+      params: statusParams,
     },
   ];
 
-  const responses1 = (await Promise.all(
-    batch1.map((request) =>
+  const landingResponses = (await Promise.all(
+    landingRequests.map((request) =>
       http.asyncRequest(request.method, request.url, null, request.params)
     )
   )) as RefinedResponse<ResponseType>[];
 
-  const nonce1 = responses1[0];
-  const randomKey = responses1[1];
-  const nonce2 = responses1[2];
-
   trackRequest({
-    response: nonce1 as RefinedResponse<"text">,
-    checkTitle: "GET Wallet Nonce",
-    successCounter: getNonceSuccess,
-    failureCounter: getNonceFailure,
-    durationTrend: getNonceDuration,
+    response: landingResponses[0] as RefinedResponse<"text">,
+    checkTitle: "GET Wallet Fiscal Code Whitelist",
+    successCounter: whitelistSuccess,
+    failureCounter: whitelistFailure,
+    durationTrend: whitelistDuration,
     successStatuses: [200],
     skipStatuses: [401],
   });
-
   trackRequest({
-    response: nonce2 as RefinedResponse<"text">,
-    checkTitle: "GET Wallet Nonce",
-    successCounter: getNonceSuccess,
-    failureCounter: getNonceFailure,
-    durationTrend: getNonceDuration,
-    successStatuses: [200],
+    response: landingResponses[1] as RefinedResponse<"text">,
+    checkTitle: "GET Current Wallet Instance Status",
+    successCounter: currentStatusSuccess,
+    failureCounter: currentStatusFailure,
+    durationTrend: currentStatusDuration,
+    successStatuses: [200, 404],
+    skipStatuses: [401],
+  });
+  trackRequest({
+    response: landingResponses[2] as RefinedResponse<"text">,
+    checkTitle: "GET Wallet Instance Status with ID",
+    successCounter: statusWithIdSuccess,
+    failureCounter: statusWithIdFailure,
+    durationTrend: statusWithIdDuration,
+    successStatuses: [200, 404],
     skipStatuses: [401],
   });
 
-  const challenge = pipe(
-    decodeBody(String(nonce1.body || ""), NonceResponse),
-    E.map((data) => data.nonce),
-    E.getOrElseW((errors) => {
-      console.error(`Error decoding wallet nonce|DETAIL => ${errors.message}`);
-      return "" as string;
-    })
+  const executeDocumentsOnIO = shouldExecute(
+    config.DOCUMENTS_ON_IO_RATE_PERCENTAGE
   );
-
-  const walletKeyTag = pipe(
-    decodeBody(String(randomKey.body || ""), CreateKeyResponse),
-    E.map((data) => data.kid),
-    E.getOrElseW((errors) => {
-      console.error(
-        `Error decoding created wallet key|DETAIL => ${errors.message}`
-      );
-      return "" as string;
-    })
-  );
-
-  const attestationChallenge = pipe(
-    decodeBody(String(nonce2.body || ""), NonceResponse),
-    E.map((data) => data.nonce),
-    E.getOrElseW((errors) => {
-      console.error(
-        `Error decoding wallet attestation nonce|DETAIL => ${errors.message}`
-      );
-      return "" as string;
-    })
-  );
-
-  if (!challenge || !walletKeyTag || !attestationChallenge) {
+  const executeITWallet = shouldExecute(config.IT_WALLET_RATE_PERCENTAGE);
+  if (!executeDocumentsOnIO && !executeITWallet) {
     return;
   }
 
-  // Batch 2: wallet instance creation and attestation request (signer local).
-  const batch2: BatchRequest[] = [
-    {
+  const nonceRequests: { name: NonceName; request: BatchRequest }[] = [];
+  const addNonceRequest = (name: NonceName) => {
+    nonceRequests.push({
+      name,
+      request: {
+        method: "GET",
+        url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/nonce`,
+        params: authTextParams,
+      },
+    });
+  };
+
+  if (executeDocumentsOnIO) {
+    addNonceRequest("documentsOnIOInstanceCreation");
+    addNonceRequest("documentsOnIOAttestation");
+  }
+  if (executeITWallet) {
+    addNonceRequest("itWalletInstanceAttestation");
+    addNonceRequest("itWalletKeyAttestation");
+  }
+
+  const prerequisiteRequests = nonceRequests.map(({ request }) => request);
+  const randomKeyIndex = prerequisiteRequests.length;
+  prerequisiteRequests.push({
+    method: "GET",
+    url: `${localUrl}/random-key`,
+    params: signerParams,
+  });
+
+  const prerequisiteResponses = (await Promise.all(
+    prerequisiteRequests.map((request) =>
+      http.asyncRequest(request.method, request.url, null, request.params)
+    )
+  )) as RefinedResponse<ResponseType>[];
+
+  const nonces: Partial<Record<NonceName, string>> = {};
+  nonceRequests.forEach(({ name }, index) => {
+    const response = prerequisiteResponses[index];
+    trackRequest({
+      response: response as RefinedResponse<"text">,
+      checkTitle: `GET Wallet Nonce (${name})`,
+      successCounter: getNonceSuccess,
+      failureCounter: getNonceFailure,
+      durationTrend: getNonceDuration,
+      successStatuses: [200],
+      skipStatuses: [401],
+    });
+    const nonce = decodeNonce(response);
+    if (nonce) {
+      nonces[name] = nonce;
+    }
+  });
+  const walletKeyTag = decodeKeyTag(prerequisiteResponses[randomKeyIndex]);
+
+  const flowRequests: (BatchRequest & { kind: FlowRequestKind })[] = [];
+  if (
+    walletKeyTag &&
+    executeDocumentsOnIO &&
+    nonces.documentsOnIOInstanceCreation
+  ) {
+    flowRequests.push({
+      kind: "documentsOnIOInstanceCreation",
       method: "POST",
       url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
       body: JSON.stringify({
-        challenge,
+        challenge: nonces.documentsOnIOInstanceCreation,
         hardware_key_tag: walletKeyTag,
         key_attestation: "test",
       }),
       params: authTextParams,
-    },
-    {
+    });
+  }
+  if (
+    walletKeyTag &&
+    executeDocumentsOnIO &&
+    nonces.documentsOnIOAttestation
+  ) {
+    flowRequests.push({
+      kind: "documentsOnIOAttestationRequest",
       method: "POST",
       url: `${localUrl}/wallet-attestation-request`,
       body: JSON.stringify({
-        nonce: attestationChallenge,
+        nonce: nonces.documentsOnIOAttestation,
         key_tag: walletKeyTag,
       }),
-      params: {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        responseType: "text",
-        timeout: "5s",
-      },
-    },
-  ];
+      params: signerJsonParams,
+    });
+  }
+  if (
+    walletKeyTag &&
+    executeITWallet &&
+    nonces.itWalletInstanceAttestation
+  ) {
+    flowRequests.push({
+      kind: "itWalletInstanceAttestationRequest",
+      method: "POST",
+      url: `${localUrl}/wallet-attestation-request`,
+      body: JSON.stringify({
+        nonce: nonces.itWalletInstanceAttestation,
+        key_tag: walletKeyTag,
+        jwk_type: "wia-request+jwt",
+      }),
+      params: signerJsonParams,
+    });
+  }
+  if (
+    walletKeyTag &&
+    executeITWallet &&
+    nonces.itWalletKeyAttestation
+  ) {
+    flowRequests.push({
+      kind: "itWalletKeyAttestationRequest",
+      method: "POST",
+      url: `${localUrl}/wallet-attestation-request`,
+      body: JSON.stringify({
+        nonce: nonces.itWalletKeyAttestation,
+        key_tag: walletKeyTag,
+        jwk_type: "wua-request+jwt",
+      }),
+      params: signerJsonParams,
+    });
+  }
 
-  const responses2 = (await Promise.all(
-    batch2.map((request) =>
-      http.asyncRequest(request.method, request.url, request.body, request.params)
+  const flowResponses = (await Promise.all(
+    flowRequests.map((request) =>
+      http.asyncRequest(
+        request.method,
+        request.url,
+        request.body || null,
+        request.params
+      )
     )
   )) as RefinedResponse<ResponseType>[];
 
-  const createWalletInstanceResponse = responses2[0];
-  const walletAttestationRequest = responses2[1];
-
-  trackRequest({
-    response: createWalletInstanceResponse as RefinedResponse<"text">,
-    checkTitle: "POST Wallet Instance",
-    successCounter: createInstanceSuccess,
-    failureCounter: createInstanceFailure,
-    durationTrend: createInstanceDuration,
-    successStatuses: [204],
-    skipStatuses: [401],
+  const flowResults: Partial<Record<FlowRequestKind, RefinedResponse<ResponseType>>> = {};
+  flowRequests.forEach(({ kind }, index) => {
+    flowResults[kind] = flowResponses[index];
   });
 
-  console.log(`Wallet Attestation Request Response: ${String(walletAttestationRequest.body || "")}`)
-  
-  const createdWar = pipe(
-    decodeBody(
-      String(walletAttestationRequest.body || ""),
-      CreateWalletAttestationResponse
-    ),
-    E.map((data) => data.wallet_attestation_request),
-    E.getOrElseW((errors) => {
-      console.error(
-        `Error decoding wallet attestation request|DETAIL => ${errors.message}`
-      );
-      return "" as string;
-    })
-  );
-
-  if (!createdWar || createWalletInstanceResponse.status !== 204) {
-    return;
+  const documentsOnIOInstanceCreationResponse =
+    flowResults.documentsOnIOInstanceCreation;
+  const documentsOnIOAttestationRequestResponse =
+    flowResults.documentsOnIOAttestationRequest;
+  if (documentsOnIOInstanceCreationResponse) {
+    trackRequest({
+      response: documentsOnIOInstanceCreationResponse as RefinedResponse<"text">,
+      checkTitle: "POST Wallet Instance",
+      successCounter: documentsOnIOInstanceCreationSuccess,
+      failureCounter: documentsOnIOInstanceCreationFailure,
+      durationTrend: documentsOnIOInstanceCreationDuration,
+      successStatuses: [204],
+      skipStatuses: [401],
+    });
   }
 
-  // Final step: exchange the attestation for a wallet token.
-  const createWalletAttestationResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-attestations`,
-    JSON.stringify({
-      //grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: createdWar,
-    }),
-    authTextParams
-  );
+  const documentsOnIOAssertion = documentsOnIOAttestationRequestResponse
+    ? decodeAttestation(documentsOnIOAttestationRequestResponse)
+    : undefined;
+  const itWalletInstanceAttestationAssertion =
+    flowResults.itWalletInstanceAttestationRequest
+      ? decodeAttestation(flowResults.itWalletInstanceAttestationRequest)
+      : undefined;
+  const itWalletKeyAttestationAssertion =
+    flowResults.itWalletKeyAttestationRequest
+      ? decodeAttestation(flowResults.itWalletKeyAttestationRequest)
+      : undefined;
 
-  trackRequest({
-    response: createWalletAttestationResponse as RefinedResponse<"text">,
-    checkTitle: "POST Wallet Attestation Token",
-    successCounter: attestationTokenSuccess,
-    failureCounter: attestationTokenFailure,
-    durationTrend: attestationTokenDuration,
-    successStatuses: [200],
-    skipStatuses: [401],
-  });
-
-  // IT Wallet new
-  const createWalletInstanceAttestationResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instance-attestations`,
-    JSON.stringify({
-      //grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: createdWar,
-    }),
-    authTextParams
-  );
-
-
-  const createWalletKeyAttestationResponse = http.post(
-    `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/key-attestations`,
-    JSON.stringify({
-      //grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: createdWar,
-    }),
-    authTextParams
-  );
-  /**
-   * Valore contenitore esterno
-  {
-    "alg": "ES256",
-    "kid": "ec#1",
-    "typ": "wua-request+jwt"
+  const attestationRequests: {
+    kind: AttestationRequestKind;
+    request: BatchRequest;
+  }[] = [];
+  if (
+    documentsOnIOInstanceCreationResponse?.status === 204 &&
+    documentsOnIOAssertion
+  ) {
+    attestationRequests.push({
+      kind: "documentsOnIOAttestation",
+      request: {
+        method: "POST",
+        url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-attestations`,
+        body: JSON.stringify({ assertion: documentsOnIOAssertion }),
+        params: authTextParams,
+      },
+    });
   }
-  {
-    "cnf": {
-      "jwk": {
-        "kty": "EC",
-        "x": "bXZ7gXeYQIN3D8s-_6PLwRci-LKeOR4pBaIDGbHu3_c",
-        "y": "-IviCfpgz96E_UJAjR0WdPdz9F3EXJG6QpZexyinBew",
-        "kid": "8UkfrvttLkpAQOOp4KYpaPsBLlvb2hhAAyTLBVN6NUc",
-        "crv": "P-256"
-      }
-    },
-    "hardware_key_tag": "bar11",
-    "hardware_signature": "foo",
-    "integrity_assertion": "foo",
-    "iss": "bar11",
-    "keys_to_attest": [
-      "eyJhbGciOiJFUzI1NiIsImtpZCI6ImVjIzEiLCJ0eXAiOiJrZXktYXR0ZXN0YXRpb24tcmVxdWVzdCtqd3QifQ.eyJjbmYiOnsiandrIjp7ImNydiI6IlAtMjU2Iiwia3R5IjoiRUMiLCJ4IjoiYlhaN2dYZVlRSU4zRDhzLV82UEx3UmNpLUxLZU9SNHBCYUlER2JIdTNfYyIsInkiOiItSXZpQ2ZwZ3o5NkVfVUpBalIwV2RQZHo5RjNFWEpHNlFwWmV4eWluQmV3Iiwia2lkIjoiOFVrZnJ2dHRMa3BBUU9PcDRLWXBhUHNCTGx2YjJoaEFBeVRMQlZONk5VYyJ9fSwid3NjZF9rZXlfYXR0ZXN0YXRpb24iOnsic3RvcmFnZV90eXBlIjoiTE9DQUxfTkFUSVZFIn0sImlhdCI6MTc4OTExMjA4NCwiZXhwIjoxODIwNjY5Njg0fQ._bPnvROq2Xl1W1wdaL67-1my_JYTU9RtW8anetKRL1uAk_ykUcfcnvRAYEBiXdwWbArYeLClN7RmH-Bry5IbFw"
-    ],
-    "nonce": "bab89e0130507dbf12f095092092b720bd4c0a4b535bd4855127f9f97d8e5c08",
-    "platform": "ios",
-    "wallet_solution_id": "appio",
-    "wallet_solution_version": "3.25.0.1",
-    "iat": 1789112118,
-    "exp": 1820669718
+  if (itWalletInstanceAttestationAssertion) {
+    attestationRequests.push({
+      kind: "itWalletInstanceAttestation",
+      request: {
+        method: "POST",
+        url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instance-attestations`,
+        body: JSON.stringify({ assertion: itWalletInstanceAttestationAssertion }),
+        params: authTextParams,
+      },
+    });
   }
-  * Valore all'interno di keys_to_attest con stessa chiave
-  {
-    "alg": "ES256",
-    "kid": "ec#1",
-    "typ": "key-attestation-request+jwt"
+  if (itWalletKeyAttestationAssertion) {
+    attestationRequests.push({
+      kind: "itWalletKeyAttestation",
+      request: {
+        method: "POST",
+        url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/key-attestations`,
+        body: JSON.stringify({ assertion: itWalletKeyAttestationAssertion }),
+        params: authTextParams,
+      },
+    });
   }
-  {
-  "cnf": {
-    "jwk": {
-      "crv": "P-256",
-      "kty": "EC",
-      "x": "bXZ7gXeYQIN3D8s-_6PLwRci-LKeOR4pBaIDGbHu3_c",
-      "y": "-IviCfpgz96E_UJAjR0WdPdz9F3EXJG6QpZexyinBew",
-      "kid": "8UkfrvttLkpAQOOp4KYpaPsBLlvb2hhAAyTLBVN6NUc"
+
+  const attestationResponses = (await Promise.all(
+    attestationRequests.map(({ request }) =>
+      http.asyncRequest(
+        request.method,
+        request.url,
+        request.body || null,
+        request.params
+      )
+    )
+  )) as RefinedResponse<ResponseType>[];
+
+  attestationRequests.forEach(({ kind }, index) => {
+    const response = attestationResponses[index] as RefinedResponse<"text">;
+    switch (kind) {
+      case "documentsOnIOAttestation":
+        trackRequest({
+          response,
+          checkTitle: "POST Wallet Attestation Token",
+          successCounter: documentsOnIOAttestationTokenSuccess,
+          failureCounter: documentsOnIOAttestationTokenFailure,
+          durationTrend: documentsOnIOAttestationTokenDuration,
+          successStatuses: [200],
+          skipStatuses: [401],
+        });
+        break;
+      case "itWalletInstanceAttestation":
+        trackRequest({
+          response,
+          checkTitle: "POST Wallet Instance Attestation",
+          successCounter: itWalletInstanceAttestationSuccess,
+          failureCounter: itWalletInstanceAttestationFailure,
+          durationTrend: itWalletInstanceAttestationDuration,
+          successStatuses: [200, 201],
+          skipStatuses: [401],
+        });
+        break;
+      case "itWalletKeyAttestation":
+        trackRequest({
+          response,
+          checkTitle: "POST Wallet Key Attestation",
+          successCounter: itWalletKeyAttestationSuccess,
+          failureCounter: itWalletKeyAttestationFailure,
+          durationTrend: itWalletKeyAttestationDuration,
+          successStatuses: [200, 201],
+          skipStatuses: [401],
+        });
+        break;
     }
-  },
-  "wscd_key_attestation": {
-    "storage_type": "LOCAL_NATIVE"
-  }
-}
-   */
+  });
 };

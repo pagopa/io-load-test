@@ -34,7 +34,7 @@ const config = getConfigOrThrow(__ENV);
 const iterationWallDuration = new Trend("iteration_wall_duration");
 
 export const options = {
-  discardResponseBodies: false,
+  discardResponseBodies: true,
   batch: 20,
   batchPerHost: 20,
   scenarios: {
@@ -42,10 +42,10 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 1,
       stages: [
-        { target: 10, duration: "2m" },
-        { target: 10, duration: "1m" },
-        { target: 100, duration: "2m" },
-        { target: 100, duration: "5m" },
+        { target: 5, duration: "2m" },
+        { target: 5, duration: "1m" },
+        { target: 20, duration: "2m" },
+        { target: 20, duration: "5m" },
         //{ target: 10, duration: "1m" }, { target: 10, duration: "1m" },
         //{ target: 50, duration: "2m" }, { target: 50, duration: "3m" },
         //{ target: 5000, duration: "10m" }, { target: 5000, duration: "2m" },

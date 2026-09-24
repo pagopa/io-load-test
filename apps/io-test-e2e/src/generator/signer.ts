@@ -14,6 +14,7 @@ import { CreateWalletAttestationRequest } from "../types/wallet";
 const app = express();
 app.use(bodyParser.json());
 
+// Validates Lollipop signing inputs and returns headers for the requested POST.
 app.post("/signature-params", async (req, res) => {
   return pipe(
     req.body,
@@ -42,6 +43,7 @@ app.post("/signature-params", async (req, res) => {
   )();
 });
 
+// Returns a fresh ES256 public JWK; its thumbprint is exposed as the key id.
 app.get("/random-key", async (_req, res) => {
   const keyPair = await jose.generateKeyPair("ES256");
   return pipe(
@@ -62,20 +64,13 @@ app.get("/random-key", async (_req, res) => {
   )();
 });
 
-// Wallet solution platforms; attestation types 2 and 3 pick one at random.
+// Attestation payloads use a randomly selected supported mobile platform.
 const APP_PLATFORMS = ["android", "ios"];
 const randomPlatform = (): string =>
   APP_PLATFORMS[Math.floor(Math.random() * APP_PLATFORMS.length)];
 
-// Builds the protected header and payload claims for the attestation
-// typology selected by the optional `jwk_type` request field,
-// which carries the target JWT `typ` value:
-//     "wp-war+jwt"      (or absent) -> original behaviour, dynamic JWK/kid
-//     "wia-request+jwt"              -> static kid, wallet solution claims
-//     "wua-request+jwt"              -> nested key attestation
-// The returned spec is then signed by the caller with the generated keypair.
-// `sign()` is async in jose v4, hence the async helper (for the nested
-// "wua-request+jwt" key-attestation JWT).
+// Maps each requested JWT type to its protected header and claims. The caller
+// signs the returned specification with the per-request ES256 keypair.
 async function buildAttestationSpec(
   request: CreateWalletAttestationRequest,
   publicKey: jose.JWK & { kid: string },
@@ -90,8 +85,7 @@ async function buildAttestationSpec(
   claims: Record<string, unknown>;
 }> {
   switch (jwkType) {
-    // "wp-war+jwt" (default, `jwk_type` absent): byte-for-byte equivalent
-    // to the original behaviour.
+    // Legacy wallet attestation; keep it as the default for older callers.
     case "wp-war+jwt":
     case undefined:
       return {
@@ -110,48 +104,32 @@ async function buildAttestationSpec(
           hardware_signature: "test",
           integrity_assertion: "test",
           iss: publicKey.kid,
-            // platform: "android"
-            // wallet_solution_id: "appio",
-            // wallet_solution_version: "3.25.0.1"
         },
       };
-    // "wia-request+jwt" as documented by the original comment block
-    // (static kid, no aud, wallet solution claims, random platform).
+    // IT Wallet instance attestation request.
     case "wia-request+jwt":
       return {
-          /**
-           * {
-              "alg": "ES256",
-              "kid": "ec#1",
-              "typ": "wia-request+jwt"
-              }
-           */
-          protectedHeader: {
-            alg: "ES256",
-            kid: "ec#1",
-            typ: "wia-request+jwt",
+        protectedHeader: {
+          alg: "ES256",
+          kid: publicKey.kid,
+          typ: "wia-request+jwt",
+        },
+        claims: {
+          nonce: request.nonce,
+          cnf: {
+            jwk: publicKey,
           },
-          claims: {
-            nonce: request.nonce,
-            cnf: {
-              jwk: publicKey,
-            },
-            hardware_key_tag: request.key_tag,
-            hardware_signature: "test",
-            integrity_assertion: "test",
-            iss: publicKey.kid,
-            platform: randomPlatform(),
-            wallet_solution_id: "appio",
-            wallet_solution_version: "3.25.0.1",
-          },
+          hardware_key_tag: request.key_tag,
+          hardware_signature: "test",
+          integrity_assertion: "test",
+          iss: publicKey.kid,
+          platform: randomPlatform(),
+          wallet_solution_id: "appio",
+          wallet_solution_version: "3.25.0.1",
+        },
       };
-    // "wua-request+jwt" as documented in src/scenarios/wallet.ts
-    // (the request-generated public key, static "bar11" key) plus a nested
-    // key-attestation JWT signed with the same generated keypair (no
-    // iat/exp, per the reference).
+    // IT Wallet key attestation request, including its nested key-attestation JWT.
     case "wua-request+jwt": {
-      // Nested key-attestation JWT signed with the same generated keypair;
-      // no iat/exp, per the reference in src/scenarios/wallet.ts.
       const innerAttestation = await new jose.SignJWT({
         cnf: {
           jwk: publicKey,
@@ -162,24 +140,24 @@ async function buildAttestationSpec(
       })
         .setProtectedHeader({
           alg: "ES256",
-          kid: "ec#1",
+          kid: publicKey.kid,
           typ: "key-attestation-request+jwt",
         })
         .sign(keypair.privateKey);
       return {
         protectedHeader: {
           alg: "ES256",
-          kid: "ec#1",
+          kid: publicKey.kid,
           typ: "wua-request+jwt",
         },
         claims: {
           cnf: {
             jwk: publicKey,
           },
-          hardware_key_tag: "bar11",
-          hardware_signature: "foo",
-          integrity_assertion: "foo",
-          iss: "bar11",
+          hardware_key_tag: request.key_tag,
+          hardware_signature: "test",
+          integrity_assertion: "test",
+          iss: publicKey.kid,
           nonce: request.nonce,
           platform: randomPlatform(),
           wallet_solution_id: "appio",
@@ -188,15 +166,14 @@ async function buildAttestationSpec(
         },
       };
     }
-    // Unreachable: the codec only accepts 1 | 2 | 3 | undefined, anything
-    // else is rejected during request decoding (500 error response).
     default:
       throw new Error(`Unsupported jwk_type: ${String(jwkType)}`);
   }
 }
 
+// Accepts a nonce, key tag, and optional JWT type; returns the signed JWT in
+// `wallet_attestation_request`. A fresh keypair is used for each request.
 app.post("/wallet-attestation-request", async (req, res) => {
-  console.info("CALLING WAR ENDPOINT: ", req.body);
   const keypair = await jose.generateKeyPair("ES256");
   return pipe(
     req.body,
@@ -205,9 +182,6 @@ app.post("/wallet-attestation-request", async (req, res) => {
     TE.mapLeft((errs) => new Error(readableReportSimplified(errs))),
     TE.chain((request) =>
       pipe(
-        // jose v4's exportJWK/calculateJwkThumbprint are async; fp-ts 2.16's
-        // TE.tryCatch awaits the returned promise and keeps rejections inside
-        // the TaskEither (no unhandled promises / thrown exceptions).
         TE.tryCatch(() => jose.exportJWK(keypair.publicKey), E.toError),
         TE.chain((publicKey) =>
           pipe(
@@ -232,10 +206,6 @@ app.post("/wallet-attestation-request", async (req, res) => {
     TE.chain(({ request, publicKey }) =>
       TE.tryCatch(
         async () => {
-          // Select the attestation typology via the optional `jwk_type`
-          // request field (1 = default, 2, 3), then sign the resulting
-          // header/claims with the freshly generated keypair
-          // (jose v4's sign() is async; tryCatch awaits the promise).
           const { protectedHeader, claims } = await buildAttestationSpec(
             request,
             publicKey,
@@ -253,15 +223,9 @@ app.post("/wallet-attestation-request", async (req, res) => {
         E.toError
       )
     ),
-    TE.map((war) => {
-      console.log(JSON.stringify({ wallet_attestation_request: war }));
-      return { wallet_attestation_request: war };
-    }),
+    TE.map((war) => ({ wallet_attestation_request: war })),
     TE.bimap(
-      (err) => {
-        console.error(err);
-        return res.status(500).json({ error: err.message })
-      },
+      (err) => res.status(500).json({ error: err.message }),
       (_) => res.json(_)
     )
   )();

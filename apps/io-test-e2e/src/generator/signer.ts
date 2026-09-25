@@ -122,7 +122,7 @@ async function buildAttestationSpec(
           hardware_key_tag: request.key_tag,
           hardware_signature: "test",
           integrity_assertion: "test",
-          iss: publicKey.kid,
+          iss: request.key_tag,
           platform: randomPlatform(),
           wallet_solution_id: "appio",
           wallet_solution_version: "3.25.0.1",
@@ -130,11 +130,13 @@ async function buildAttestationSpec(
       };
     // IT Wallet key attestation request, including its nested key-attestation JWT.
     case "wua-request+jwt": {
+      const platform = randomPlatform();
       const innerAttestation = await new jose.SignJWT({
         cnf: {
           jwk: publicKey,
         },
         wscd_key_attestation: {
+          attestation: platform == "android" ? "test" : undefined,
           storage_type: "LOCAL_NATIVE",
         },
       })
@@ -143,6 +145,8 @@ async function buildAttestationSpec(
           kid: publicKey.kid,
           typ: "key-attestation-request+jwt",
         })
+        .setIssuedAt()
+        .setExpirationTime("2h")
         .sign(keypair.privateKey);
       return {
         protectedHeader: {
@@ -157,9 +161,9 @@ async function buildAttestationSpec(
           hardware_key_tag: request.key_tag,
           hardware_signature: "test",
           integrity_assertion: "test",
-          iss: publicKey.kid,
+          iss: request.key_tag,
           nonce: request.nonce,
-          platform: randomPlatform(),
+          platform,
           wallet_solution_id: "appio",
           wallet_solution_version: "3.25.0.1",
           keys_to_attest: [innerAttestation],
@@ -212,6 +216,7 @@ app.post("/wallet-attestation-request", async (req, res) => {
             keypair,
             request.jwk_type
           );
+          console.error({ protectedHeader, claims });
           return (
             new jose.SignJWT(claims)
               .setProtectedHeader(protectedHeader)

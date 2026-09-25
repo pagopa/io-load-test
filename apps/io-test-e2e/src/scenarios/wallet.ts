@@ -388,8 +388,8 @@ export const walletInstanceCreation = async ({
       request: {
         method: "POST",
         url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instance-attestations`,
-        body: JSON.stringify({ assertion: itWalletInstanceAttestationAssertion }),
-        params: authTextParams,
+        body: itWalletInstanceAttestationAssertion,
+        params: {...authTextParams, headers: {...authTextParams.headers, "Content-Type": "text/plain"}},
       },
     });
   }
@@ -399,8 +399,8 @@ export const walletInstanceCreation = async ({
       request: {
         method: "POST",
         url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/key-attestations`,
-        body: JSON.stringify({ assertion: itWalletKeyAttestationAssertion }),
-        params: authTextParams,
+        body: itWalletKeyAttestationAssertion,
+        params: {...authTextParams, headers: {...authTextParams.headers, "Content-Type": "text/plain"}},
       },
     });
   }
@@ -418,6 +418,9 @@ export const walletInstanceCreation = async ({
 
   attestationRequests.forEach(({ kind }, index) => {
     const response = attestationResponses[index] as RefinedResponse<"text">;
+    console.log("Debugging attestation response:");
+    console.log(kind);
+    console.log(JSON.stringify(response));
     switch (kind) {
       case "documentsOnIOAttestation":
         trackRequest({
@@ -437,7 +440,7 @@ export const walletInstanceCreation = async ({
           successCounter: itWalletInstanceAttestationSuccess,
           failureCounter: itWalletInstanceAttestationFailure,
           durationTrend: itWalletInstanceAttestationDuration,
-          successStatuses: [200, 201],
+          successStatuses: [200],
           skipStatuses: [401],
         });
         break;
@@ -448,7 +451,7 @@ export const walletInstanceCreation = async ({
           successCounter: itWalletKeyAttestationSuccess,
           failureCounter: itWalletKeyAttestationFailure,
           durationTrend: itWalletKeyAttestationDuration,
-          successStatuses: [200, 201],
+          successStatuses: [200],
           skipStatuses: [401],
         });
         break;

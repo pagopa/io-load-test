@@ -10,10 +10,23 @@ export const CreateKeyResponse = t.type({
 });
 export type CreateKeyResponse = t.TypeOf<typeof CreateKeyResponse>;
 
-export const CreateWalletAttestationRequest = t.type({
-  nonce: t.string,
-  key_tag: t.string,
-});
+export const CreateWalletAttestationRequest = t.intersection([
+  t.type({
+    nonce: t.string,
+    key_tag: t.string,
+  }),
+  // Selects which attestation JWK/JWT variant the signer's
+  // /wallet-attestation-request endpoint produces ("wp-war+jwt" =
+  // default/current, the other typ strings = alternative typologies);
+  // defaults to "wp-war+jwt" when omitted.
+  t.partial({
+    jwk_type: t.union([
+      t.literal("wp-war+jwt"),
+      t.literal("wia-request+jwt"),
+      t.literal("wua-request+jwt"),
+    ]),
+  }),
+]);
 export type CreateWalletAttestationRequest = t.TypeOf<
   typeof CreateWalletAttestationRequest
 >;

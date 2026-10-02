@@ -68,13 +68,35 @@ export const IConfig = t.intersection([
     REDIS_CONN_STRING: NonEmptyString,
     ENABLE_LV_SCENERY: t.boolean,
     ENABLE_SSO_INTROSPECTION: t.boolean,
-    SERVICES_BASE_RATE_PERCENTAGE: t.number
+    SERVICES_BASE_RATE_PERCENTAGE: t.number,
+    DOCUMENTS_ON_IO_RATE_PERCENTAGE: t.number,
+    IT_WALLET_RATE_PERCENTAGE: t.number
   }),
   K6Config,
   FeatureScenarioConfig,
   FixturesConfig,
 ]);
 export type IConfig = t.TypeOf<typeof IConfig>;
+
+const parseWalletRatePercentage = (
+  value: string | undefined,
+  variableName: string
+): number => {
+  if (value === undefined) {
+    return 0;
+  }
+
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`${variableName} must be an integer between 0 and 100`);
+  }
+
+  const percentage = Number(value);
+  if (percentage < 0 || percentage > 100 || percentage % 1 !== 0) {
+    throw new Error(`${variableName} must be an integer between 0 and 100`);
+  }
+
+  return percentage;
+};
 
 export const getConfigOrThrow = (
   environment: { [name: string]: string } | NodeJS.ProcessEnv
@@ -112,6 +134,14 @@ export const getConfigOrThrow = (
         env.SERVICES_BASE_RATE_PERCENTAGE,
         IntegerFromString.decode,
         E.getOrElse(() => 100)
+      ),
+      DOCUMENTS_ON_IO_RATE_PERCENTAGE: parseWalletRatePercentage(
+        env.DOCUMENTS_ON_IO_RATE_PERCENTAGE,
+        "DOCUMENTS_ON_IO_RATE_PERCENTAGE"
+      ),
+      IT_WALLET_RATE_PERCENTAGE: parseWalletRatePercentage(
+        env.IT_WALLET_RATE_PERCENTAGE,
+        "IT_WALLET_RATE_PERCENTAGE"
       )
     }),
     IConfig.decode,

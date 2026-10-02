@@ -42,10 +42,10 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 1,
       stages: [
+        { target: 1, duration: "2m" },
+        { target: 1, duration: "1m" },
         { target: 10, duration: "2m" },
-        { target: 10, duration: "1m" },
-        { target: 100, duration: "2m" },
-        { target: 100, duration: "15m" },
+        { target: 10, duration: "5m" },
         //{ target: 10, duration: "1m" }, { target: 10, duration: "1m" },
         //{ target: 50, duration: "2m" }, { target: 50, duration: "3m" },
         //{ target: 5000, duration: "10m" }, { target: 5000, duration: "2m" },

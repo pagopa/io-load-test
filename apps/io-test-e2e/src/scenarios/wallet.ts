@@ -66,13 +66,15 @@ type BatchRequest = {
 type NonceName =
   | "documentsOnIOInstanceCreation"
   | "documentsOnIOAttestation"
+  | "itWalletInstanceCreation"
   | "itWalletInstanceAttestation"
-  | "itWalletKeyAttestation";
+  | `itWalletKeyAttestation${number}`;
 type FlowRequestKind =
   | "documentsOnIOInstanceCreation"
   | "documentsOnIOAttestationRequest"
+  | "itWalletInstanceCreation"
   | "itWalletInstanceAttestationRequest"
-  | "itWalletKeyAttestationRequest";
+  | `itWalletKeyAttestationRequest${number}`;
 type AttestationRequestKind =
   | "documentsOnIOAttestation"
   | "itWalletInstanceAttestation"
@@ -214,8 +216,11 @@ export const walletInstanceCreation = async ({
     addNonceRequest("documentsOnIOAttestation");
   }
   if (executeITWallet) {
+    addNonceRequest("itWalletInstanceCreation");
     addNonceRequest("itWalletInstanceAttestation");
-    addNonceRequest("itWalletKeyAttestation");
+    for (let index = 0; index < config.IT_WALLET_KEY_ATTESTATION_MULTIPLIER; index++) {
+      addNonceRequest(`itWalletKeyAttestation${index}` as const);
+    }
   }
 
   const prerequisiteRequests = nonceRequests.map(({ request }) => request);
@@ -232,7 +237,7 @@ export const walletInstanceCreation = async ({
     )
   )) as RefinedResponse<ResponseType>[];
 
-  const nonces: Partial<Record<NonceName, string>> = {};
+  const nonces = new Map<NonceName, string>();
   nonceRequests.forEach(({ name }, index) => {
     const response = prerequisiteResponses[index];
     trackRequest({
@@ -246,23 +251,27 @@ export const walletInstanceCreation = async ({
     });
     const nonce = decodeNonce(response);
     if (nonce) {
-      nonces[name] = nonce;
+      nonces.set(name, nonce);
     }
   });
   const walletKeyTag = decodeKeyTag(prerequisiteResponses[randomKeyIndex]);
+  const documentsOnIOInstanceCreationNonce = nonces.get("documentsOnIOInstanceCreation");
+  const documentsOnIOAttestationNonce = nonces.get("documentsOnIOAttestation");
+  const itWalletInstanceCreationNonce = nonces.get("itWalletInstanceCreation");
+  const itWalletInstanceAttestationNonce = nonces.get("itWalletInstanceAttestation");
 
   const flowRequests: (BatchRequest & { kind: FlowRequestKind })[] = [];
   if (
     walletKeyTag &&
     executeDocumentsOnIO &&
-    nonces.documentsOnIOInstanceCreation
+    documentsOnIOInstanceCreationNonce
   ) {
     flowRequests.push({
       kind: "documentsOnIOInstanceCreation",
       method: "POST",
       url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
       body: JSON.stringify({
-        challenge: nonces.documentsOnIOInstanceCreation,
+        challenge: documentsOnIOInstanceCreationNonce,
         hardware_key_tag: walletKeyTag,
         key_attestation: "test",
       }),
@@ -272,14 +281,14 @@ export const walletInstanceCreation = async ({
   if (
     walletKeyTag &&
     executeDocumentsOnIO &&
-    nonces.documentsOnIOAttestation
+    documentsOnIOAttestationNonce
   ) {
     flowRequests.push({
       kind: "documentsOnIOAttestationRequest",
       method: "POST",
       url: `${localUrl}/wallet-attestation-request`,
       body: JSON.stringify({
-        nonce: nonces.documentsOnIOAttestation,
+        nonce: documentsOnIOAttestationNonce,
         key_tag: walletKeyTag,
       }),
       params: signerJsonParams,
@@ -288,36 +297,55 @@ export const walletInstanceCreation = async ({
   if (
     walletKeyTag &&
     executeITWallet &&
-    nonces.itWalletInstanceAttestation
+    itWalletInstanceCreationNonce
+  ) {
+    flowRequests.push({
+      kind: "itWalletInstanceCreation",
+      method: "POST",
+      url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
+      body: JSON.stringify({
+        challenge: itWalletInstanceCreationNonce,
+        hardware_key_tag: walletKeyTag,
+        key_attestation: "test",
+      }),
+      params: authTextParams,
+    });
+  }
+  if (
+    walletKeyTag &&
+    executeITWallet &&
+    itWalletInstanceAttestationNonce
   ) {
     flowRequests.push({
       kind: "itWalletInstanceAttestationRequest",
       method: "POST",
       url: `${localUrl}/wallet-attestation-request`,
       body: JSON.stringify({
-        nonce: nonces.itWalletInstanceAttestation,
+        nonce: itWalletInstanceAttestationNonce,
         key_tag: walletKeyTag,
         jwk_type: "wia-request+jwt",
       }),
       params: signerJsonParams,
     });
   }
-  if (
-    walletKeyTag &&
-    executeITWallet &&
-    nonces.itWalletKeyAttestation
-  ) {
-    flowRequests.push({
-      kind: "itWalletKeyAttestationRequest",
-      method: "POST",
-      url: `${localUrl}/wallet-attestation-request`,
-      body: JSON.stringify({
-        nonce: nonces.itWalletKeyAttestation,
-        key_tag: walletKeyTag,
-        jwk_type: "wua-request+jwt",
-      }),
-      params: signerJsonParams,
-    });
+  if (walletKeyTag && executeITWallet) {
+    for (let index = 0; index < config.IT_WALLET_KEY_ATTESTATION_MULTIPLIER; index++) {
+      const nonceName = `itWalletKeyAttestation${index}` as const;
+      const nonce = nonces.get(nonceName);
+      if (nonce) {
+        flowRequests.push({
+          kind: `itWalletKeyAttestationRequest${index}` as const,
+          method: "POST",
+          url: `${localUrl}/wallet-attestation-request`,
+          body: JSON.stringify({
+            nonce,
+            key_tag: walletKeyTag,
+            jwk_type: "wua-request+jwt",
+          }),
+          params: signerJsonParams,
+        });
+      }
+    }
   }
 
   const flowResponses = (await Promise.all(
@@ -331,37 +359,41 @@ export const walletInstanceCreation = async ({
     )
   )) as RefinedResponse<ResponseType>[];
 
-  const flowResults: Partial<Record<FlowRequestKind, RefinedResponse<ResponseType>>> = {};
+  const flowResults = new Map<FlowRequestKind, RefinedResponse<ResponseType>>();
   flowRequests.forEach(({ kind }, index) => {
-    flowResults[kind] = flowResponses[index];
+    flowResults.set(kind, flowResponses[index]);
   });
 
   const documentsOnIOInstanceCreationResponse =
-    flowResults.documentsOnIOInstanceCreation;
+    flowResults.get("documentsOnIOInstanceCreation");
   const documentsOnIOAttestationRequestResponse =
-    flowResults.documentsOnIOAttestationRequest;
-  if (documentsOnIOInstanceCreationResponse) {
-    trackRequest({
-      response: documentsOnIOInstanceCreationResponse as RefinedResponse<"text">,
-      checkTitle: "POST Wallet Instance",
-      successCounter: documentsOnIOInstanceCreationSuccess,
-      failureCounter: documentsOnIOInstanceCreationFailure,
-      durationTrend: documentsOnIOInstanceCreationDuration,
-      successStatuses: [204],
-      skipStatuses: [401],
-    });
-  }
+    flowResults.get("documentsOnIOAttestationRequest");
+  const itWalletInstanceCreationResponse = flowResults.get("itWalletInstanceCreation");
+  const itWalletInstanceAttestationRequestResponse =
+    flowResults.get("itWalletInstanceAttestationRequest");
+  [
+    { name: "Documents on IO", response: documentsOnIOInstanceCreationResponse },
+    { name: "IT Wallet", response: itWalletInstanceCreationResponse },
+  ].forEach(({ name, response }) => {
+    if (response) {
+      trackRequest({
+        response: response as RefinedResponse<"text">,
+        checkTitle: `POST Wallet Instance (${name})`,
+        successCounter: documentsOnIOInstanceCreationSuccess,
+        failureCounter: documentsOnIOInstanceCreationFailure,
+        durationTrend: documentsOnIOInstanceCreationDuration,
+        successStatuses: [204],
+        skipStatuses: [401],
+      });
+    }
+  });
 
   const documentsOnIOAssertion = documentsOnIOAttestationRequestResponse
     ? decodeAttestation(documentsOnIOAttestationRequestResponse)
     : undefined;
   const itWalletInstanceAttestationAssertion =
-    flowResults.itWalletInstanceAttestationRequest
-      ? decodeAttestation(flowResults.itWalletInstanceAttestationRequest)
-      : undefined;
-  const itWalletKeyAttestationAssertion =
-    flowResults.itWalletKeyAttestationRequest
-      ? decodeAttestation(flowResults.itWalletKeyAttestationRequest)
+    itWalletInstanceAttestationRequestResponse
+      ? decodeAttestation(itWalletInstanceAttestationRequestResponse)
       : undefined;
 
   const attestationRequests: {
@@ -382,7 +414,10 @@ export const walletInstanceCreation = async ({
       },
     });
   }
-  if (itWalletInstanceAttestationAssertion) {
+  if (
+    itWalletInstanceCreationResponse?.status === 204 &&
+    itWalletInstanceAttestationAssertion
+  ) {
     attestationRequests.push({
       kind: "itWalletInstanceAttestation",
       request: {
@@ -393,16 +428,26 @@ export const walletInstanceCreation = async ({
       },
     });
   }
-  if (itWalletKeyAttestationAssertion) {
-    attestationRequests.push({
-      kind: "itWalletKeyAttestation",
-      request: {
-        method: "POST",
-        url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/key-attestations`,
-        body: itWalletKeyAttestationAssertion,
-        params: {...authTextParams, headers: {...authTextParams.headers, "Content-Type": "text/plain"}},
-      },
-    });
+  if (itWalletInstanceCreationResponse?.status === 204) {
+    for (let index = 0; index < config.IT_WALLET_KEY_ATTESTATION_MULTIPLIER; index++) {
+      const requestKind = `itWalletKeyAttestationRequest${index}` as const;
+      const response = flowResults.get(requestKind);
+      const assertion = response ? decodeAttestation(response) : undefined;
+      if (assertion) {
+        attestationRequests.push({
+          kind: "itWalletKeyAttestation",
+          request: {
+            method: "POST",
+            url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/key-attestations`,
+            body: assertion,
+            params: {
+              ...authTextParams,
+              headers: { ...authTextParams.headers, "Content-Type": "text/plain" },
+            },
+          },
+        });
+      }
+    }
   }
 
   const attestationResponses = (await Promise.all(

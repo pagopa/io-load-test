@@ -142,7 +142,7 @@ This tool can handle different test scenarios through the `SCENARIOS` environmen
 - `CGN`: Simulates checking the Carta Giovani Nazionale (CGN) card status in the portfolio tab.
 
 ### Wallet creation and attestations
-Each selected wallet flow sends its own `POST /api/wallet/v1/wallet-instances`, with a dedicated nonce as the `challenge`. If both flows are selected, two creations are sent using the same `hardware_key_tag`, obtained from a single signer `/random-key` request. Backend attestations for a flow are sent only after its own creation returns `204`; a failed creation does not block the other flow.
+Each selected wallet flow sends its own `POST /api/wallet/v1/wallet-instances`, with a dedicated nonce as the `challenge` and a separate signer `/random-key` request for its `hardware_key_tag`. If both flows are selected, two keys are requested and the creations use different hardware key tags. Each flow uses its own tag in all its attestation signer requests; an invalid key response blocks only that flow. If the signer returns identical tags, the IT Wallet flow is skipped rather than reusing the Documents on IO key. Backend attestations for a flow are sent only after its own creation returns `204`; a failed creation does not block the other flow.
 
 Documents on IO sends one `/wallet-attestations` request using a signer-generated `wp-war+jwt` assertion. IT Wallet sends one `/wallet-instance-attestations` request using `wia-request+jwt` and N `/key-attestations` requests, each using its own `wua-request+jwt`. IT Wallet assertions are sent as raw JWTs with `Content-Type: text/plain`.
 

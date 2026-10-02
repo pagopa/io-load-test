@@ -68,6 +68,7 @@ type ScenarioOptions = {
   signerOverrides?: Record<number, ResponseOverride>;
   creationStatuses?: number[];
   randomKeyOverride?: ResponseOverride;
+  randomKeyOverrides?: Record<number, ResponseOverride>;
   keyAttestationStatus?: number;
 };
 type RecordedRequest = {
@@ -94,10 +95,13 @@ const runScenario = async (options: ScenarioOptions = {}) => {
   const inFlight: Record<string, number> = {};
   const concurrency: Record<string, number> = {};
   let nonceIndex = 0;
+  let randomKeyIndex = 0;
   let signerIndex = 0;
   let creationIndex = 0;
   const prefix = "/api/wallet/v1/";
   const itCreationNonce = options.documents ? "nonce-2" : "nonce-0";
+  const documentsOnIOKeyTag = "key-0";
+  const itWalletKeyTag = options.documents ? "key-1" : "key-0";
   const consumeNonce = (nonce: string) => {
     assert.ok(!consumedNonces.has(nonce), `Reused nonce: ${nonce}`);
     consumedNonces.add(nonce);
@@ -123,15 +127,20 @@ const runScenario = async (options: ScenarioOptions = {}) => {
         });
       } else if (path === "/random-key") {
         stage = "prerequisites";
+        const currentKeyIndex = randomKeyIndex++;
         Object.assign(response, {
-          body: JSON.stringify({ kid: "shared-key" }),
+          body: JSON.stringify({ kid: `key-${currentKeyIndex}` }),
           ...options.randomKeyOverride,
+          ...options.randomKeyOverrides?.[currentKeyIndex],
         });
       } else if (path === `${prefix}wallet-instances`) {
         stage = "flow";
         const payload = JSON.parse(String(body));
         consumeNonce(payload.challenge);
-        assert.strictEqual(payload.hardware_key_tag, "shared-key");
+        assert.strictEqual(
+          payload.hardware_key_tag,
+          payload.challenge === itCreationNonce ? itWalletKeyTag : documentsOnIOKeyTag
+        );
         assert.strictEqual(payload.key_attestation, "test");
         assert.strictEqual(params.headers["Content-Type"], "application/json");
         const currentCreationIndex = creationIndex++;
@@ -140,7 +149,10 @@ const runScenario = async (options: ScenarioOptions = {}) => {
         stage = "flow";
         const assertion: Assertion = JSON.parse(String(body));
         consumeNonce(assertion.nonce);
-        assert.strictEqual(assertion.key_tag, "shared-key");
+        assert.strictEqual(
+          assertion.key_tag,
+          assertion.jwk_type === undefined ? documentsOnIOKeyTag : itWalletKeyTag
+        );
         assert.strictEqual(params.headers["Content-Type"], "application/json");
         const currentSignerIndex = signerIndex++;
         Object.assign(response, {
@@ -165,7 +177,10 @@ const runScenario = async (options: ScenarioOptions = {}) => {
           assert.ok(successfulCreations.has(itCreationNonce));
         }
         assert.ok(consumedNonces.has(assertion.nonce));
-        assert.strictEqual(assertion.key_tag, "shared-key");
+        assert.strictEqual(
+          assertion.key_tag,
+          path === `${prefix}wallet-attestations` ? documentsOnIOKeyTag : itWalletKeyTag
+        );
         if (path === `${prefix}key-attestations`) {
           response.status = options.keyAttestationStatus ?? 200;
         }
@@ -250,13 +265,17 @@ const testFlows = async () => {
       assert.strictEqual(result.byPath("wallet-attestations").length, Number(documents));
       assert.strictEqual(result.byPath("wallet-instance-attestations").length, Number(itWallet));
       assert.strictEqual(result.byPath("key-attestations").length, Number(itWallet) * 10);
-      assert.strictEqual(result.requests.filter(({ path }) => path === "/random-key").length, Number(creations > 0));
+      assert.strictEqual(result.requests.filter(({ path }) => path === "/random-key").length, creations);
+      assert.strictEqual(
+        new Set(result.byPath("wallet-instances").map(({ body }) => JSON.parse(String(body)).hardware_key_tag)).size,
+        creations
+      );
       assert.strictEqual(result.concurrency.landing, 3);
       assert.strictEqual(result.metrics.wallet_create_instance_success || 0, creations);
       assert.strictEqual(result.metrics.wallet_get_nonce_success || 0, nonceCount);
       assert.strictEqual(result.metrics.wallet_key_attestation_success || 0, Number(itWallet) * 10);
       if (creations > 0) {
-        assert.strictEqual(result.concurrency.prerequisites, nonceCount + 1);
+        assert.strictEqual(result.concurrency.prerequisites, nonceCount + creations);
         assert.strictEqual(result.concurrency.flow, Number(documents) * 2 + Number(itWallet) * 12);
         assert.strictEqual(result.concurrency.attestations, Number(documents) + Number(itWallet) * 11);
       } else {
@@ -295,6 +314,16 @@ const testFlows = async () => {
     const noKey = await runScenario({ documents: true, itWallet: true, randomKeyOverride: override });
     assert.strictEqual(noKey.byPath("wallet-instances").length, 0);
     assert.strictEqual(noKey.requests.filter(({ method }) => method === "POST").length, 0);
+    const noDocumentsKey = await runScenario({ documents: true, itWallet: true, randomKeyOverrides: { 0: override } });
+    assert.strictEqual(noDocumentsKey.byPath("wallet-instances").length, 1);
+    assert.strictEqual(noDocumentsKey.byPath("wallet-attestations").length, 0);
+    assert.strictEqual(noDocumentsKey.byPath("wallet-instance-attestations").length, 1);
+    assert.strictEqual(noDocumentsKey.byPath("key-attestations").length, 10);
+    const noITKey = await runScenario({ documents: true, itWallet: true, randomKeyOverrides: { 1: override } });
+    assert.strictEqual(noITKey.byPath("wallet-instances").length, 1);
+    assert.strictEqual(noITKey.byPath("wallet-attestations").length, 1);
+    assert.strictEqual(noITKey.byPath("wallet-instance-attestations").length, 0);
+    assert.strictEqual(noITKey.byPath("key-attestations").length, 0);
     const badNonce = await runScenario({ itWallet: true, nonceOverrides: { 3: override } });
     assert.strictEqual(badNonce.byPath("key-attestations").length, 9);
     assert.deepStrictEqual(
@@ -312,6 +341,16 @@ const testFlows = async () => {
     assert.strictEqual(badInstanceSigner.byPath("wallet-instance-attestations").length, 0);
     assert.strictEqual(badInstanceSigner.byPath("key-attestations").length, 10);
   }
+  const duplicateKeys = await runScenario({
+    documents: true,
+    itWallet: true,
+    randomKeyOverrides: { 1: { body: JSON.stringify({ kid: "key-0" }) } },
+  });
+  assert.strictEqual(duplicateKeys.byPath("wallet-instances").length, 1);
+  assert.strictEqual(duplicateKeys.byPath("wallet-attestations").length, 1);
+  assert.strictEqual(duplicateKeys.byPath("wallet-instance-attestations").length, 0);
+  assert.strictEqual(duplicateKeys.byPath("key-attestations").length, 0);
+  assert.strictEqual(duplicateKeys.requests.filter(({ path }) => path === "/wallet-attestation-request").length, 1);
   const keyErrors = await runScenario({ itWallet: true, keyAttestationStatus: 500 });
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_failure, 10);
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_success || 0, 0);

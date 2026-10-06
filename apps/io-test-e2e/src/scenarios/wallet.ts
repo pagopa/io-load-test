@@ -191,10 +191,10 @@ export const walletInstanceCreation = async ({
     skipStatuses: [401],
   });
 
-  const executeDocumentsOnIO = shouldExecute(
-    config.DOCUMENTS_ON_IO_RATE_PERCENTAGE
-  );
   const executeITWallet = shouldExecute(config.IT_WALLET_RATE_PERCENTAGE);
+  const executeDocumentsOnIO =
+    !executeITWallet &&
+    shouldExecute(config.DOCUMENTS_ON_IO_RATE_PERCENTAGE);
   if (!executeDocumentsOnIO && !executeITWallet) {
     return;
   }
@@ -224,17 +224,12 @@ export const walletInstanceCreation = async ({
   }
 
   const prerequisiteRequests = nonceRequests.map(({ request }) => request);
-  const addRandomKeyRequest = () => {
-    const index = prerequisiteRequests.length;
-    prerequisiteRequests.push({
-      method: "GET",
-      url: `${localUrl}/random-key`,
-      params: signerParams,
-    });
-    return index;
-  };
-  const documentsOnIOKeyIndex = executeDocumentsOnIO ? addRandomKeyRequest() : undefined;
-  const itWalletKeyIndex = executeITWallet ? addRandomKeyRequest() : undefined;
+  const randomKeyIndex = prerequisiteRequests.length;
+  prerequisiteRequests.push({
+    method: "GET",
+    url: `${localUrl}/random-key`,
+    params: signerParams,
+  });
 
   const prerequisiteResponses = (await Promise.all(
     prerequisiteRequests.map((request) =>
@@ -259,16 +254,7 @@ export const walletInstanceCreation = async ({
       nonces.set(name, nonce);
     }
   });
-  const documentsOnIOKeyTag = documentsOnIOKeyIndex === undefined
-    ? undefined
-    : decodeKeyTag(prerequisiteResponses[documentsOnIOKeyIndex]);
-  let itWalletKeyTag = itWalletKeyIndex === undefined
-    ? undefined
-    : decodeKeyTag(prerequisiteResponses[itWalletKeyIndex]);
-  if (documentsOnIOKeyTag && documentsOnIOKeyTag === itWalletKeyTag) {
-    console.log("Wallet signer returned identical hardware key tags; skipping IT Wallet flow");
-    itWalletKeyTag = undefined;
-  }
+  const walletKeyTag = decodeKeyTag(prerequisiteResponses[randomKeyIndex]);
   const documentsOnIOInstanceCreationNonce = nonces.get("documentsOnIOInstanceCreation");
   const documentsOnIOAttestationNonce = nonces.get("documentsOnIOAttestation");
   const itWalletInstanceCreationNonce = nonces.get("itWalletInstanceCreation");
@@ -276,7 +262,7 @@ export const walletInstanceCreation = async ({
 
   const flowRequests: (BatchRequest & { kind: FlowRequestKind })[] = [];
   if (
-    documentsOnIOKeyTag &&
+    walletKeyTag &&
     executeDocumentsOnIO &&
     documentsOnIOInstanceCreationNonce
   ) {
@@ -286,14 +272,14 @@ export const walletInstanceCreation = async ({
       url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
       body: JSON.stringify({
         challenge: documentsOnIOInstanceCreationNonce,
-        hardware_key_tag: documentsOnIOKeyTag,
+        hardware_key_tag: walletKeyTag,
         key_attestation: "test",
       }),
       params: authTextParams,
     });
   }
   if (
-    documentsOnIOKeyTag &&
+    walletKeyTag &&
     executeDocumentsOnIO &&
     documentsOnIOAttestationNonce
   ) {
@@ -303,13 +289,13 @@ export const walletInstanceCreation = async ({
       url: `${localUrl}/wallet-attestation-request`,
       body: JSON.stringify({
         nonce: documentsOnIOAttestationNonce,
-        key_tag: documentsOnIOKeyTag,
+        key_tag: walletKeyTag,
       }),
       params: signerJsonParams,
     });
   }
   if (
-    itWalletKeyTag &&
+    walletKeyTag &&
     executeITWallet &&
     itWalletInstanceCreationNonce
   ) {
@@ -319,14 +305,14 @@ export const walletInstanceCreation = async ({
       url: `${config.IO_BACKEND_BASE_URL}/api/wallet/v1/wallet-instances`,
       body: JSON.stringify({
         challenge: itWalletInstanceCreationNonce,
-        hardware_key_tag: itWalletKeyTag,
+        hardware_key_tag: walletKeyTag,
         key_attestation: "test",
       }),
       params: authTextParams,
     });
   }
   if (
-    itWalletKeyTag &&
+    walletKeyTag &&
     executeITWallet &&
     itWalletInstanceAttestationNonce
   ) {
@@ -336,13 +322,13 @@ export const walletInstanceCreation = async ({
       url: `${localUrl}/wallet-attestation-request`,
       body: JSON.stringify({
         nonce: itWalletInstanceAttestationNonce,
-        key_tag: itWalletKeyTag,
+        key_tag: walletKeyTag,
         jwk_type: "wia-request+jwt",
       }),
       params: signerJsonParams,
     });
   }
-  if (itWalletKeyTag && executeITWallet) {
+  if (walletKeyTag && executeITWallet) {
     for (let index = 0; index < config.IT_WALLET_KEY_ATTESTATION_MULTIPLIER; index++) {
       const nonceName = `itWalletKeyAttestation${index}` as const;
       const nonce = nonces.get(nonceName);
@@ -353,7 +339,7 @@ export const walletInstanceCreation = async ({
           url: `${localUrl}/wallet-attestation-request`,
           body: JSON.stringify({
             nonce,
-            key_tag: itWalletKeyTag,
+            key_tag: walletKeyTag,
             jwk_type: "wua-request+jwt",
           }),
           params: signerJsonParams,

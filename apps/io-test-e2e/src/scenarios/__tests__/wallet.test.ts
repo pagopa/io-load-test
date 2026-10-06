@@ -68,7 +68,6 @@ type ScenarioOptions = {
   signerOverrides?: Record<number, ResponseOverride>;
   creationStatuses?: number[];
   randomKeyOverride?: ResponseOverride;
-  randomKeyOverrides?: Record<number, ResponseOverride>;
   keyAttestationStatus?: number;
 };
 type RecordedRequest = {
@@ -78,6 +77,7 @@ type RecordedRequest = {
   params: { headers: Record<string, string> };
 };
 type Assertion = { nonce: string; key_tag: string; jwk_type?: string };
+const walletKeyTag = "wallet-key";
 
 const runScenario = async (options: ScenarioOptions = {}) => {
   const config = getConfigOrThrow({
@@ -95,13 +95,10 @@ const runScenario = async (options: ScenarioOptions = {}) => {
   const inFlight: Record<string, number> = {};
   const concurrency: Record<string, number> = {};
   let nonceIndex = 0;
-  let randomKeyIndex = 0;
   let signerIndex = 0;
   let creationIndex = 0;
   const prefix = "/api/wallet/v1/";
-  const itCreationNonce = options.documents ? "nonce-2" : "nonce-0";
-  const documentsOnIOKeyTag = "key-0";
-  const itWalletKeyTag = options.documents ? "key-1" : "key-0";
+  const itCreationNonce = "nonce-0";
   const consumeNonce = (nonce: string) => {
     assert.ok(!consumedNonces.has(nonce), `Reused nonce: ${nonce}`);
     consumedNonces.add(nonce);
@@ -127,20 +124,15 @@ const runScenario = async (options: ScenarioOptions = {}) => {
         });
       } else if (path === "/random-key") {
         stage = "prerequisites";
-        const currentKeyIndex = randomKeyIndex++;
         Object.assign(response, {
-          body: JSON.stringify({ kid: `key-${currentKeyIndex}` }),
+          body: JSON.stringify({ kid: walletKeyTag }),
           ...options.randomKeyOverride,
-          ...options.randomKeyOverrides?.[currentKeyIndex],
         });
       } else if (path === `${prefix}wallet-instances`) {
         stage = "flow";
         const payload = JSON.parse(String(body));
         consumeNonce(payload.challenge);
-        assert.strictEqual(
-          payload.hardware_key_tag,
-          payload.challenge === itCreationNonce ? itWalletKeyTag : documentsOnIOKeyTag
-        );
+        assert.strictEqual(payload.hardware_key_tag, walletKeyTag);
         assert.strictEqual(payload.key_attestation, "test");
         assert.strictEqual(params.headers["Content-Type"], "application/json");
         const currentCreationIndex = creationIndex++;
@@ -149,10 +141,7 @@ const runScenario = async (options: ScenarioOptions = {}) => {
         stage = "flow";
         const assertion: Assertion = JSON.parse(String(body));
         consumeNonce(assertion.nonce);
-        assert.strictEqual(
-          assertion.key_tag,
-          assertion.jwk_type === undefined ? documentsOnIOKeyTag : itWalletKeyTag
-        );
+        assert.strictEqual(assertion.key_tag, walletKeyTag);
         assert.strictEqual(params.headers["Content-Type"], "application/json");
         const currentSignerIndex = signerIndex++;
         Object.assign(response, {
@@ -177,10 +166,7 @@ const runScenario = async (options: ScenarioOptions = {}) => {
           assert.ok(successfulCreations.has(itCreationNonce));
         }
         assert.ok(consumedNonces.has(assertion.nonce));
-        assert.strictEqual(
-          assertion.key_tag,
-          path === `${prefix}wallet-attestations` ? documentsOnIOKeyTag : itWalletKeyTag
-        );
+        assert.strictEqual(assertion.key_tag, walletKeyTag);
         if (path === `${prefix}key-attestations`) {
           response.status = options.keyAttestationStatus ?? 200;
         }
@@ -258,26 +244,25 @@ const testFlows = async () => {
   for (const documents of [false, true]) {
     for (const itWallet of [false, true]) {
       const result = await runScenario({ documents, itWallet });
-      const creations = Number(documents) + Number(itWallet);
-      const nonceCount = Number(documents) * 2 + Number(itWallet) * 12;
+      const executeITWallet = itWallet;
+      const executeDocumentsOnIO = documents && !itWallet;
+      const creations = Number(executeDocumentsOnIO) + Number(executeITWallet);
+      const nonceCount = Number(executeDocumentsOnIO) * 2 + Number(executeITWallet) * 12;
       assert.strictEqual(result.byPath("nonce").length, nonceCount);
       assert.strictEqual(result.byPath("wallet-instances").length, creations);
-      assert.strictEqual(result.byPath("wallet-attestations").length, Number(documents));
-      assert.strictEqual(result.byPath("wallet-instance-attestations").length, Number(itWallet));
-      assert.strictEqual(result.byPath("key-attestations").length, Number(itWallet) * 10);
-      assert.strictEqual(result.requests.filter(({ path }) => path === "/random-key").length, creations);
-      assert.strictEqual(
-        new Set(result.byPath("wallet-instances").map(({ body }) => JSON.parse(String(body)).hardware_key_tag)).size,
-        creations
-      );
+      assert.strictEqual(result.byPath("wallet-attestations").length, Number(executeDocumentsOnIO));
+      assert.strictEqual(result.byPath("wallet-instance-attestations").length, Number(executeITWallet));
+      assert.strictEqual(result.byPath("key-attestations").length, Number(executeITWallet) * 10);
+      assert.strictEqual(result.requests.filter(({ path }) => path === "/random-key").length, Number(creations > 0));
+      assert.ok(result.byPath("wallet-instances").every(({ body }) => JSON.parse(String(body)).hardware_key_tag === walletKeyTag));
       assert.strictEqual(result.concurrency.landing, 3);
       assert.strictEqual(result.metrics.wallet_create_instance_success || 0, creations);
       assert.strictEqual(result.metrics.wallet_get_nonce_success || 0, nonceCount);
       assert.strictEqual(result.metrics.wallet_key_attestation_success || 0, Number(itWallet) * 10);
       if (creations > 0) {
         assert.strictEqual(result.concurrency.prerequisites, nonceCount + creations);
-        assert.strictEqual(result.concurrency.flow, Number(documents) * 2 + Number(itWallet) * 12);
-        assert.strictEqual(result.concurrency.attestations, Number(documents) + Number(itWallet) * 11);
+        assert.strictEqual(result.concurrency.flow, Number(executeDocumentsOnIO) * 2 + Number(executeITWallet) * 12);
+        assert.strictEqual(result.concurrency.attestations, Number(executeDocumentsOnIO) + Number(executeITWallet) * 11);
       } else {
         assert.strictEqual(result.requests.length, 3);
       }
@@ -285,7 +270,7 @@ const testFlows = async () => {
       assert.strictEqual(new Set(keyRequests.map(({ body }) => body)).size, keyRequests.length);
       assert.deepStrictEqual(
         keyRequests.map(({ body }) => JSON.parse(String(body)).nonce),
-        itWallet ? Array.from({ length: 10 }, (_, index) => `nonce-${index + (documents ? 4 : 2)}`) : []
+        itWallet ? Array.from({ length: 10 }, (_, index) => `nonce-${index + 2}`) : []
       );
     }
   }
@@ -296,32 +281,31 @@ const testFlows = async () => {
     assert.strictEqual(result.byPath("key-attestations").length, Number(multiplier));
   }
   for (const status of [400, 401, 500]) {
-    const itFailed = await runScenario({ documents: true, itWallet: true, creationStatuses: [204, status] });
-    assert.strictEqual(itFailed.byPath("wallet-attestations").length, 1);
+    const itFailed = await runScenario({ documents: true, itWallet: true, creationStatuses: [status] });
+    assert.strictEqual(itFailed.byPath("wallet-instances").length, 1);
+    assert.strictEqual(itFailed.byPath("wallet-attestations").length, 0);
     assert.strictEqual(itFailed.byPath("wallet-instance-attestations").length, 0);
     assert.strictEqual(itFailed.byPath("key-attestations").length, 0);
     assert.strictEqual(itFailed.metrics.wallet_create_instance_failure || 0, Number(status !== 401));
-    const documentsFailed = await runScenario({ documents: true, itWallet: true, creationStatuses: [status, 204] });
+    const documentsFailed = await runScenario({ documents: true, itWallet: false, creationStatuses: [status] });
     assert.strictEqual(documentsFailed.byPath("wallet-attestations").length, 0);
-    assert.strictEqual(documentsFailed.byPath("wallet-instance-attestations").length, 1);
-    assert.strictEqual(documentsFailed.byPath("key-attestations").length, 10);
+    assert.strictEqual(documentsFailed.byPath("wallet-instance-attestations").length, 0);
+    assert.strictEqual(documentsFailed.byPath("wallet-instances").length, 1);
+    assert.strictEqual(documentsFailed.byPath("key-attestations").length, 0);
   }
-  const noCreationNonce = await runScenario({ documents: true, itWallet: true, nonceOverrides: { 2: { status: 500 } } });
-  assert.strictEqual(noCreationNonce.byPath("wallet-instances").length, 1);
-  assert.strictEqual(noCreationNonce.byPath("wallet-attestations").length, 1);
+  const noCreationNonce = await runScenario({ documents: true, itWallet: true, nonceOverrides: { 0: { status: 500 } } });
+  assert.strictEqual(noCreationNonce.byPath("wallet-instances").length, 0);
+  assert.strictEqual(noCreationNonce.byPath("wallet-attestations").length, 0);
   assert.strictEqual(noCreationNonce.byPath("key-attestations").length, 0);
   for (const override of [{ status: 500 }, { body: "invalid JSON" }, { body: "{}" }]) {
     const noKey = await runScenario({ documents: true, itWallet: true, randomKeyOverride: override });
     assert.strictEqual(noKey.byPath("wallet-instances").length, 0);
     assert.strictEqual(noKey.requests.filter(({ method }) => method === "POST").length, 0);
-    const noDocumentsKey = await runScenario({ documents: true, itWallet: true, randomKeyOverrides: { 0: override } });
-    assert.strictEqual(noDocumentsKey.byPath("wallet-instances").length, 1);
+    const noDocumentsKey = await runScenario({ documents: true, itWallet: false, randomKeyOverride: override });
+    assert.strictEqual(noDocumentsKey.byPath("wallet-instances").length, 0);
     assert.strictEqual(noDocumentsKey.byPath("wallet-attestations").length, 0);
-    assert.strictEqual(noDocumentsKey.byPath("wallet-instance-attestations").length, 1);
-    assert.strictEqual(noDocumentsKey.byPath("key-attestations").length, 10);
-    const noITKey = await runScenario({ documents: true, itWallet: true, randomKeyOverrides: { 1: override } });
-    assert.strictEqual(noITKey.byPath("wallet-instances").length, 1);
-    assert.strictEqual(noITKey.byPath("wallet-attestations").length, 1);
+    const noITKey = await runScenario({ documents: false, itWallet: true, randomKeyOverride: override });
+    assert.strictEqual(noITKey.byPath("wallet-instances").length, 0);
     assert.strictEqual(noITKey.byPath("wallet-instance-attestations").length, 0);
     assert.strictEqual(noITKey.byPath("key-attestations").length, 0);
     const badNonce = await runScenario({ itWallet: true, nonceOverrides: { 3: override } });
@@ -341,16 +325,12 @@ const testFlows = async () => {
     assert.strictEqual(badInstanceSigner.byPath("wallet-instance-attestations").length, 0);
     assert.strictEqual(badInstanceSigner.byPath("key-attestations").length, 10);
   }
-  const duplicateKeys = await runScenario({
-    documents: true,
-    itWallet: true,
-    randomKeyOverrides: { 1: { body: JSON.stringify({ kid: "key-0" }) } },
-  });
-  assert.strictEqual(duplicateKeys.byPath("wallet-instances").length, 1);
-  assert.strictEqual(duplicateKeys.byPath("wallet-attestations").length, 1);
-  assert.strictEqual(duplicateKeys.byPath("wallet-instance-attestations").length, 0);
-  assert.strictEqual(duplicateKeys.byPath("key-attestations").length, 0);
-  assert.strictEqual(duplicateKeys.requests.filter(({ path }) => path === "/wallet-attestation-request").length, 1);
+  const prioritizedIT = await runScenario({ documents: true, itWallet: true });
+  assert.strictEqual(prioritizedIT.byPath("wallet-instances").length, 1);
+  assert.strictEqual(prioritizedIT.byPath("wallet-attestations").length, 0);
+  assert.strictEqual(prioritizedIT.byPath("wallet-instance-attestations").length, 1);
+  assert.strictEqual(prioritizedIT.byPath("key-attestations").length, 10);
+  assert.strictEqual(prioritizedIT.requests.filter(({ path }) => path === "/random-key").length, 1);
   const keyErrors = await runScenario({ itWallet: true, keyAttestationStatus: 500 });
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_failure, 10);
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_success || 0, 0);

@@ -70,7 +70,8 @@ export const IConfig = t.intersection([
     ENABLE_SSO_INTROSPECTION: t.boolean,
     SERVICES_BASE_RATE_PERCENTAGE: t.number,
     DOCUMENTS_ON_IO_RATE_PERCENTAGE: t.number,
-    IT_WALLET_RATE_PERCENTAGE: t.number
+    IT_WALLET_RATE_PERCENTAGE: t.number,
+    IT_WALLET_KEY_ATTESTATION_MULTIPLIER: t.number
   }),
   K6Config,
   FeatureScenarioConfig,
@@ -96,6 +97,23 @@ const parseWalletRatePercentage = (
   }
 
   return percentage;
+};
+
+const parseWalletKeyAttestationMultiplier = (
+  value: string | undefined
+): number => {
+  if (value === undefined) {
+    return 10;
+  }
+
+  const multiplier = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(multiplier) || multiplier < 1) {
+    throw new Error(
+      "IT_WALLET_KEY_ATTESTATION_MULTIPLIER must be a positive safe integer"
+    );
+  }
+
+  return multiplier;
 };
 
 export const getConfigOrThrow = (
@@ -142,6 +160,9 @@ export const getConfigOrThrow = (
       IT_WALLET_RATE_PERCENTAGE: parseWalletRatePercentage(
         env.IT_WALLET_RATE_PERCENTAGE,
         "IT_WALLET_RATE_PERCENTAGE"
+      ),
+      IT_WALLET_KEY_ATTESTATION_MULTIPLIER: parseWalletKeyAttestationMultiplier(
+        env.IT_WALLET_KEY_ATTESTATION_MULTIPLIER
       )
     }),
     IConfig.decode,

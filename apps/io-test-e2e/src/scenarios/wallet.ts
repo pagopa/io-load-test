@@ -6,6 +6,7 @@ import { getK6DefaultHttpParams } from "../utils/http";
 import { trackRequest } from "../utils/metrics";
 import { getResponseBodyAsType } from "../utils/responses";
 import { FeatureScenarioParams } from "../types/scenario";
+import { lvScenario } from "./lv";
 import {
   CreateKeyResponse,
   CreateWalletAttestationResponse,
@@ -122,6 +123,7 @@ const shouldExecute = (percentage: number): boolean =>
 export const walletInstanceCreation = async ({
   config,
   key,
+  REDIS_CLIENT,
   token,
 }: FeatureScenarioParams) => {
   const authTextParams = getK6DefaultHttpParams(token, { responseType: "text" });
@@ -190,6 +192,20 @@ export const walletInstanceCreation = async ({
     successStatuses: [200, 404],
     skipStatuses: [401],
   });
+
+  if (
+    config.ENABLE_LV_SCENERY !== true &&
+    landingResponses.some((response) => response.status === 401)
+  ) {
+    try {
+      await lvScenario(config, REDIS_CLIENT, key);
+    } catch {
+      console.error(
+        "Wallet session refresh failed; skipping wallet requests for this iteration."
+      );
+    }
+    return;
+  }
 
   const executeITWallet = shouldExecute(config.IT_WALLET_RATE_PERCENTAGE);
   const executeDocumentsOnIO =

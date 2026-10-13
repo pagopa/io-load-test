@@ -63,12 +63,15 @@ type ResponseOverride = { status?: number; body?: string };
 type ScenarioOptions = {
   documents?: boolean;
   itWallet?: boolean;
+  enableLv?: boolean;
   multiplier?: string;
+  landingStatuses?: number[];
   nonceOverrides?: Record<number, ResponseOverride>;
   signerOverrides?: Record<number, ResponseOverride>;
   creationStatuses?: number[];
   randomKeyOverride?: ResponseOverride;
   keyAttestationStatus?: number;
+  refreshFails?: boolean;
 };
 type RecordedRequest = {
   method: string;
@@ -84,6 +87,7 @@ const runScenario = async (options: ScenarioOptions = {}) => {
     ...environment,
     DOCUMENTS_ON_IO_RATE_PERCENTAGE: options.documents ? "100" : "0",
     IT_WALLET_RATE_PERCENTAGE: options.itWallet ? "100" : "0",
+    ENABLE_LV_SCENERY: options.enableLv ? "true" : "false",
     ...(options.multiplier === undefined
       ? {}
       : { IT_WALLET_KEY_ATTESTATION_MULTIPLIER: options.multiplier }),
@@ -97,6 +101,9 @@ const runScenario = async (options: ScenarioOptions = {}) => {
   let nonceIndex = 0;
   let signerIndex = 0;
   let creationIndex = 0;
+  let landingIndex = 0;
+  let refreshCalls = 0;
+  let refreshCompleted = false;
   const prefix = "/api/wallet/v1/";
   const itCreationNonce = "nonce-0";
   const consumeNonce = (nonce: string) => {
@@ -171,6 +178,10 @@ const runScenario = async (options: ScenarioOptions = {}) => {
           response.status = options.keyAttestationStatus ?? 200;
         }
       }
+      if (stage === "landing") {
+        response.status = options.landingStatuses?.[landingIndex] ?? response.status;
+        landingIndex++;
+      }
       if (url.startsWith(config.IO_BACKEND_BASE_URL)) {
         assert.strictEqual(params.headers.Authorization, "Bearer test-token");
       }
@@ -205,7 +216,7 @@ const runScenario = async (options: ScenarioOptions = {}) => {
     runInNewContext(output, {
       exports: module.exports,
       module,
-      console: { log: () => undefined },
+      console: { log: () => undefined, error: () => undefined },
       require: (name: string) => {
         if (name === "k6/http") {
           return http;
@@ -215,6 +226,19 @@ const runScenario = async (options: ScenarioOptions = {}) => {
         }
         if (name === "k6") {
           return { check: () => true };
+        }
+        if (name === "./lv") {
+          return {
+            lvScenario: async () => {
+              refreshCalls++;
+              await new Promise<void>((resolve) => setTimeout(resolve, 0));
+              refreshCompleted = true;
+              if (options.refreshFails) {
+                throw new Error("refresh failed");
+              }
+              return "refreshed-token";
+            },
+          };
         }
         if (name === "../utils/http" || name === "../utils/metrics") {
           return loadModule(resolve(filePath, "..", `${name}.ts`));
@@ -227,17 +251,216 @@ const runScenario = async (options: ScenarioOptions = {}) => {
   const wallet = loadModule(resolve(__dirname, "../wallet.ts")) as {
     walletInstanceCreation: (params: {
       config: typeof config;
+      REDIS_CLIENT: unknown;
       key: { fiscalCode: string };
       token: string;
     }) => Promise<void>;
   };
   await wallet.walletInstanceCreation({
     config,
+    REDIS_CLIENT: {},
     key: { fiscalCode: environment.TEST_FISCAL_CODE },
     token: "test-token",
   });
   const byPath = (path: string) => requests.filter((request) => request.path === `${prefix}${path}`);
-  return { requests, metrics, concurrency, byPath };
+  return { requests, metrics, concurrency, byPath, refreshCalls, refreshCompleted };
+};
+
+type LvScenarioOptions = {
+  fastLoginBody?: unknown;
+  throwFastLoginJson?: boolean;
+  redisSetFails?: boolean;
+};
+
+const runLvScenario = async (options: LvScenarioOptions = {}) => {
+  const requests: string[] = [];
+  const events: string[] = [];
+  let localToken: string | undefined;
+  const http = {
+    post: (url: string) => {
+      requests.push(url);
+      const responseBody = url.endsWith("/nonce/generate")
+        ? { nonce: "00000000-0000-0000-0000-000000000000" }
+        : url.endsWith("/signature-params")
+        ? { signature: "test-signature", signatureInput: "test-input" }
+        : options.fastLoginBody ?? { token: "refreshed-token" };
+      return {
+        status: 200,
+        timings: { duration: 1, waiting: 1 },
+        json: () => {
+          if (url.endsWith("/fast-login") && options.throwFastLoginJson) {
+            throw new Error("invalid JSON");
+          }
+          return responseBody;
+        },
+      };
+    },
+  };
+  class Metric {
+    add() {}
+  }
+  const modules = new Map<string, { exports: unknown }>();
+  const loadModule = (filePath: string): unknown => {
+    const cached = modules.get(filePath);
+    if (cached) {
+      return cached.exports;
+    }
+    const module = { exports: {} };
+    modules.set(filePath, module);
+    const localRequire = createRequire(filePath);
+    const output = transpileModule(readFileSync(filePath, "utf8"), {
+      compilerOptions: { module: ModuleKind.CommonJS, esModuleInterop: true },
+    }).outputText;
+    runInNewContext(output, {
+      exports: module.exports,
+      module,
+      console: { log: () => undefined, error: () => undefined },
+      require: (name: string) => {
+        if (name === "k6/http") {
+          return http;
+        }
+        if (name === "k6/metrics") {
+          return { Counter: Metric, Trend: Metric };
+        }
+        if (name === "k6") {
+          return {
+            check: () => true,
+            fail: (message: string) => {
+              throw new Error(message);
+            },
+          };
+        }
+        if (name === "../utils/metrics") {
+          return { trackRequest: () => undefined };
+        }
+        if (name === "../utils/token") {
+          return {
+            acquireLockOrWait: async () => {
+              events.push("acquire");
+              return "lock-owner";
+            },
+            releaseLock: async () => {
+              events.push("release");
+            },
+            setKey: () => () => {
+              events.push("setKey");
+              return Promise.resolve(
+                options.redisSetFails
+                  ? { _tag: "Left", left: new Error("redis unavailable") }
+                  : { _tag: "Right", right: "OK" }
+              );
+            },
+            setLocalToken: (_thumbprint: string, token: string) => {
+              events.push("setLocalToken");
+              localToken = token;
+            },
+          };
+        }
+        return localRequire(name);
+      },
+    });
+    return module.exports;
+  };
+  const lv = loadModule(resolve(__dirname, "../lv.ts")) as {
+    lvScenario: (
+      config: { AUTH_BACKEND_BASE_URL: string },
+      redisClient: unknown,
+      key: {
+        thumbprint: string;
+        fiscalCode: string;
+        privateKey: { kty: string };
+      }
+    ) => Promise<string>;
+  };
+  let token: string | undefined;
+  let error: unknown;
+  try {
+    token = await lv.lvScenario(
+      { AUTH_BACKEND_BASE_URL: "https://auth.example.test" },
+      {},
+      {
+        thumbprint: "test-thumbprint",
+        fiscalCode: environment.TEST_FISCAL_CODE,
+        privateKey: { kty: "EC" },
+      }
+    );
+  } catch (caught) {
+    error = caught;
+  }
+  return { requests, events, localToken, token, error };
+};
+
+const testLvScenario = async () => {
+  const success = await runLvScenario();
+  assert.ifError(success.error);
+  assert.strictEqual(success.token, "refreshed-token");
+  assert.strictEqual(success.localToken, "refreshed-token");
+  assert.deepStrictEqual(success.events, [
+    "acquire",
+    "setKey",
+    "setLocalToken",
+    "release",
+  ]);
+  assert.strictEqual(success.requests.length, 3);
+
+  const redisFailure = await runLvScenario({ redisSetFails: true });
+  assert.ok(redisFailure.error);
+  assert.strictEqual(redisFailure.localToken, undefined);
+  assert.deepStrictEqual(redisFailure.events, ["acquire", "setKey", "release"]);
+
+  for (const options of [
+    { fastLoginBody: {} },
+    { throwFastLoginJson: true },
+  ]) {
+    const invalidResponse = await runLvScenario(options);
+    assert.ok(invalidResponse.error);
+    assert.strictEqual(invalidResponse.localToken, undefined);
+    assert.deepStrictEqual(invalidResponse.events, ["acquire", "release"]);
+  }
+};
+
+const testSessionRefresh = async () => {
+  for (const landingIndex of [0, 1, 2]) {
+    const landingStatuses = [200, 200, 200];
+    landingStatuses[landingIndex] = 401;
+    const result = await runScenario({ landingStatuses });
+    assert.strictEqual(result.refreshCalls, 1);
+    assert.strictEqual(result.refreshCompleted, true);
+    assert.strictEqual(result.requests.length, 3);
+    assert.ok(result.requests.every(({ method }) => method === "GET"));
+    assert.strictEqual(result.byPath("nonce").length, 0);
+    assert.strictEqual(result.byPath("wallet-instances").length, 0);
+  }
+
+  const allUnauthorized = await runScenario({ landingStatuses: [401, 401, 401] });
+  assert.strictEqual(allUnauthorized.refreshCalls, 1);
+  assert.strictEqual(allUnauthorized.requests.length, 3);
+
+  const failedRefresh = await runScenario({
+    landingStatuses: [401, 200, 200],
+    refreshFails: true,
+  });
+  assert.strictEqual(failedRefresh.refreshCalls, 1);
+  assert.strictEqual(failedRefresh.requests.length, 3);
+
+  for (const status of [200, 404, 500]) {
+    const noRefresh = await runScenario({ landingStatuses: [status, 200, 200] });
+    assert.strictEqual(noRefresh.refreshCalls, 0);
+  }
+
+  const lvEnabled = await runScenario({
+    enableLv: true,
+    landingStatuses: [401, 200, 200],
+  });
+  assert.strictEqual(lvEnabled.refreshCalls, 0);
+
+  const laterUnauthorized = await runScenario({
+    documents: true,
+    creationStatuses: [401],
+  });
+  assert.strictEqual(laterUnauthorized.refreshCalls, 0);
+  assert.strictEqual(laterUnauthorized.byPath("wallet-instances").length, 1);
+  assert.strictEqual(laterUnauthorized.byPath("wallet-attestations").length, 0);
 };
 
 const testFlows = async () => {
@@ -334,6 +557,8 @@ const testFlows = async () => {
   const keyErrors = await runScenario({ itWallet: true, keyAttestationStatus: 500 });
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_failure, 10);
   assert.strictEqual(keyErrors.metrics.wallet_key_attestation_success || 0, 0);
+  await testSessionRefresh();
+  await testLvScenario();
   console.log("Wallet configuration and flow tests passed");
 };
 

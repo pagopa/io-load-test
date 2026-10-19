@@ -155,6 +155,8 @@ Run the offline configuration and flow regressions from `apps/io-test-e2e` with 
 ### Lollipop Verification (LV) & Token Caching
 It is possible to disable the LV scenario (`ENABLE_LV_SCENERY=false`) to generate a valid session token once and cache it in Redis, instead of refreshing it every iteration with a new fast login. This avoids overloading the Session Manager when testing specific backend services.
 
+When LV is disabled, if any of the three initial WALLET landing requests returns `401`, WALLET performs one fast login and stores the new token in Redis and VU memory. It then skips the rest of WALLET for that iteration: requests are not retried, and no wallet creation or attestation is started. A later iteration using the same key can use the refreshed token. This recovery does not change requests already running in other scenarios and does not handle `401` responses later in the WALLET flow.
+
 ### Bonus scenario & SSO introspection
 The `BONUS` scenario can use an introspection API for the SSO token. To perform this API call without receiving a `401 Unauthorized`, the `k6` client IP must be added to the IP Whitelist on the Session Manager. This API call is toggled via `ENABLE_SSO_INTROSPECTION`.
 

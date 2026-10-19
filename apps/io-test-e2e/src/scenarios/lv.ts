@@ -97,50 +97,59 @@ export const lvScenario = async (
 
   const lockOwner = await acquireLockOrWait(REDIS_CLIENT, key.thumbprint);
 
-  // Refresh the session using Lollipop signature
-  const refreshSession = http.post(
-    `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
-    undefined,
-    {
-      headers: {
-        "x-pagopa-lollipop-original-method": "POST",
-        "x-pagopa-lollipop-original-url": `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
-        signature: lollipopParams.signature,
-        "signature-input": lollipopParams.signatureInput,
-        "Content-Type": "application/json",
-      },
-      responseType: "text",
-      timeout: "12s",
+  try {
+    // Refresh the session using Lollipop signature
+    const refreshSession = http.post(
+      `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
+      undefined,
+      {
+        headers: {
+          "x-pagopa-lollipop-original-method": "POST",
+          "x-pagopa-lollipop-original-url": `${config.AUTH_BACKEND_BASE_URL}/api/auth/v1/fast-login`,
+          signature: lollipopParams.signature,
+          "signature-input": lollipopParams.signatureInput,
+          "Content-Type": "application/json",
+        },
+        responseType: "text",
+        timeout: "12s",
+      }
+    );
+    trackRequest({
+      response: refreshSession,
+      checkTitle: "POST Fast Login",
+      successCounter: refreshFastLoginSuccess,
+      failureCounter: refreshFastLoginFailure,
+      durationTrend: refreshFastLoginDuration,
+      successStatuses: [200]
+    });
+    refreshFastLoginWaiting.add(refreshSession.timings.waiting);
+    duration += refreshSession.timings.duration;
+    const errorOrToken = pipe(
+      refreshSession.json(),
+      AccessToken.decode,
+      E.map((_) => _.token),
+      E.mapLeft((_) => {
+        console.error(`refreshResponse => ${refreshSession.status}`)
+        console.error(`FiscalCode => ${key.fiscalCode} | Thumbprint => ${key.thumbprint}`)
+        console.error(`Error decoding the refresh session response|DETAIL=${errorsToReadableMessages(_).join("|")}`);
+        return new Error(readableReportSimplified(_));
+      })
+    );
+    if (E.isLeft(errorOrToken)) {
+      fail(errorOrToken.left.message);
     }
-  );
-  trackRequest({
-    response: refreshSession,
-    checkTitle: "POST Fast Login",
-    successCounter: refreshFastLoginSuccess,
-    failureCounter: refreshFastLoginFailure,
-    durationTrend: refreshFastLoginDuration,
-    successStatuses: [200]
-  });
-  refreshFastLoginWaiting.add(refreshSession.timings.waiting);
-  duration += refreshSession.timings.duration;
-  const errorOrToken = pipe(
-    refreshSession.json(),
-    AccessToken.decode,
-    E.map((_) => _.token),
-    E.mapLeft((_) => {
-      console.error(`refreshResponse => ${refreshSession.status}`)
-      console.error(`FiscalCode => ${key.fiscalCode} | Thumbprint => ${key.thumbprint}`)
-      console.error(`Error decoding the refresh session response|DETAIL=${errorsToReadableMessages(_).join("|")}`);
-      return new Error(readableReportSimplified(_));
-    })
-  );
-  if(E.isLeft(errorOrToken)) {
+    const tokenPersisted = await setKey(
+      REDIS_CLIENT,
+      key.thumbprint,
+      errorOrToken.right
+    )();
+    if (E.isLeft(tokenPersisted)) {
+      throw tokenPersisted.left;
+    }
+    setLocalToken(key.thumbprint, errorOrToken.right);
+    scenarioDuration.add(duration);
+    return errorOrToken.right;
+  } finally {
     await releaseLock(REDIS_CLIENT, key.thumbprint, lockOwner);
-    fail(errorOrToken.left.message);
   }
-  await setKey(REDIS_CLIENT, key.thumbprint, errorOrToken.right)();
-  setLocalToken(key.thumbprint, errorOrToken.right);
-  await releaseLock(REDIS_CLIENT, key.thumbprint, lockOwner);
-  scenarioDuration.add(duration);
-  return errorOrToken.right;
 };

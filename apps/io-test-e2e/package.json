@@ -48,7 +48,7 @@
     "webpack-glob-entries": "^1.0.1"
   },
   "dependencies": {
-    "@faker-js/faker": "^8.4.1",
+    "@faker-js/faker": "^10.0.0",
     "@mattrglobal/http-signatures": "^4.1.0",
     "@pagopa/ts-commons": "^12.3.0",
     "date-fns": "^2.30.0",
